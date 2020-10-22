@@ -4,7 +4,7 @@ pub const zzz = @import("zzz");
 
 pub fn main() !void {
     // Create a root Node.
-    var node = zzz.Node.initNull(std.testing.allocator);
+    var node = zzz.ZNode.initNull(std.testing.allocator);
     defer node.deinit();
 
     const print = std.debug.print;

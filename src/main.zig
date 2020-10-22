@@ -93,7 +93,7 @@
 const std = @import("std");
 
 /// The only output of the tokenizer.
-pub const NodeToken = struct {
+pub const ZNodeToken = struct {
     const Self = @This();
     /// 0 is top level children.
     depth: usize,
@@ -102,7 +102,7 @@ pub const NodeToken = struct {
     end: usize,
 };
 
-/// Parses text outputting NodeTokens. Does not convert strings to numbers, and all strings are
+/// Parses text outputting ZNodeTokens. Does not convert strings to numbers, and all strings are
 /// "as is", no escaping is performed.
 pub const StreamingParser = struct {
     const Self = @This();
@@ -137,7 +137,7 @@ pub const StreamingParser = struct {
     pub const State = enum {
         /// Whether we're starting on an openline.
         OpenLine,
-        ExpectNode,
+        ExpectZNode,
         Indent,
         OpenCharacter,
         Quotation,
@@ -175,14 +175,14 @@ pub const StreamingParser = struct {
 
     pub fn hasCompleted(self: *const Self) bool {
         switch (self.state) {
-            .ExpectNode, .OpenLine, .EndString => return true,
+            .ExpectZNode, .OpenLine, .EndString => return true,
             else => return false,
         }
     }
 
-    /// Feeds a character to the parser. May output a Node. Check "hasCompleted" to see if there
+    /// Feeds a character to the parser. May output a ZNode. Check "hasCompleted" to see if there
     /// are any unfinished strings.
-    pub fn feed(self: *Self, c: u8) Error!?NodeToken {
+    pub fn feed(self: *Self, c: u8) Error!?ZNodeToken {
         defer self.current_index += 1;
         //std.debug.print("FEED<{}> {} {} ({c})\n", .{self.state, self.current_index, c, c});
         switch (self.state) {
@@ -202,14 +202,14 @@ pub const StreamingParser = struct {
                 }
             },
             // All basically act the same except for a few minor differences.
-            .ExpectNode, .OpenLine, .EndString, .OpenCharacter => switch (c) {
+            .ExpectZNode, .OpenLine, .EndString, .OpenCharacter => switch (c) {
                 '#' => {
                     if (self.state == .OpenLine) {
                         self.state = .OpenComment;
                     } else {
                         defer self.state = .Comment;
                         if (self.state == .OpenCharacter) {
-                            return NodeToken{
+                            return ZNodeToken{
                                 .depth = self.line_depth + self.node_depth,
                                 .start = self.start_index,
                                 .end = self.current_index - self.trailing_spaces,
@@ -234,8 +234,8 @@ pub const StreamingParser = struct {
                     }
                 },
                 ':' => {
-                    defer self.state = .ExpectNode;
-                    const node = NodeToken{
+                    defer self.state = .ExpectZNode;
+                    const node = ZNodeToken{
                         .depth = self.line_depth + self.node_depth,
                         .start = self.start_index,
                         .end = self.current_index - self.trailing_spaces,
@@ -248,8 +248,8 @@ pub const StreamingParser = struct {
                     }
                 },
                 ',' => {
-                    defer self.state = .ExpectNode;
-                    const node = NodeToken{
+                    defer self.state = .ExpectZNode;
+                    const node = ZNodeToken{
                         .depth = self.line_depth + self.node_depth,
                         .start = self.start_index,
                         .end = self.current_index - self.trailing_spaces,
@@ -264,8 +264,8 @@ pub const StreamingParser = struct {
                     if (self.node_depth == 0) {
                         return Error.SemicolonWentPastRoot;
                     }
-                    defer self.state = .ExpectNode;
-                    const node = NodeToken{
+                    defer self.state = .ExpectZNode;
+                    const node = ZNodeToken{
                         .depth = self.line_depth + self.node_depth,
                         .start = self.start_index,
                         .end = self.current_index - self.trailing_spaces,
@@ -295,7 +295,7 @@ pub const StreamingParser = struct {
                 },
                 '\n' => {
                     defer self.state = .OpenLine;
-                    const node = NodeToken{
+                    const node = ZNodeToken{
                         .depth = self.line_depth + self.node_depth,
                         .start = self.start_index,
                         .end = self.current_index - self.trailing_spaces,
@@ -341,7 +341,7 @@ pub const StreamingParser = struct {
             .Quotation => switch (c) {
                 '"' => {
                     self.state = .EndString;
-                    const node = NodeToken{
+                    const node = ZNodeToken{
                         .depth = self.line_depth + self.node_depth,
                         .start = self.start_index,
                         .end = self.current_index,
@@ -357,7 +357,7 @@ pub const StreamingParser = struct {
             .SingleLineCharacter => switch (c) {
                 '"' => {
                     self.state = .EndString;
-                    const node = NodeToken{
+                    const node = ZNodeToken{
                         .depth = self.line_depth + self.node_depth,
                         .start = self.start_index,
                         .end = self.current_index,
@@ -415,7 +415,7 @@ pub const StreamingParser = struct {
                 ']' => {
                     if (self.close_string_level == self.open_string_level) {
                         self.state = .EndString;
-                        return NodeToken{
+                        return ZNodeToken{
                             .depth = self.line_depth + self.node_depth,
                             .start = self.start_index,
                             .end = self.current_index - self.open_string_level - 1,
@@ -518,9 +518,9 @@ test "parsing depths" {
     testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 2);
 }
 
-/// A `Node`'s value. The `.String` is dynamic memory managed by the node. These should not be
-/// created directly but through a `Node`.
-pub const Value = union(enum) {
+/// A `ZNode`'s value. The `.String` is dynamic memory managed by the node. These should not be
+/// created directly but through a `ZNode`.
+pub const ZValue = union(enum) {
     const Self = @This();
     Null,
     // Unallocated, references text.
@@ -532,17 +532,17 @@ pub const Value = union(enum) {
     Boolean: bool,
 };
 
-/// A `Node` in a zzz tree. The root `Node` will have a value of `.Null`.
-pub const Node = struct {
+/// A `ZNode` in a zzz tree. The root `ZNode` will have a value of `.Null`.
+pub const ZNode = struct {
     const Self = @This();
-    parent: ?*Node,
-    /// The `Node`s value.
-    value: Value,
-    /// The `Node`s children. Should really have to access this directly, but through the use
+    parent: ?*ZNode,
+    /// The `ZNode`s value.
+    value: ZValue,
+    /// The `ZNode`s children. Should really have to access this directly, but through the use
     /// of convenience functions.
-    children: std.ArrayList(Node),
+    children: std.ArrayList(ZNode),
 
-    /// Turns the `Node`s string value into a dynamic one if it isn't one already. Optionally
+    /// Turns the `ZNode`s string value into a dynamic one if it isn't one already. Optionally
     /// recurses children. Essentially enforces ownership of string contents.
     pub fn makeDynamic(self: *Self, recurse: bool) anyerror!void {
         if (self.value == .StringRef) {
@@ -555,61 +555,61 @@ pub const Node = struct {
         }
     }
 
-    /// Create a `.Null` `Node`.
+    /// Create a `.Null` `ZNode`.
     pub fn initNull(allocator: *std.mem.Allocator) Self {
         return Self{
             .parent = null,
             .value = .Null,
-            .children = std.ArrayList(Node).init(allocator),
+            .children = std.ArrayList(ZNode).init(allocator),
         };
     }
 
-    /// Create a `.String` `Node`. The string is managed by the node.
+    /// Create a `.String` `ZNode`. The string is managed by the node.
     pub fn initString(allocator: *std.mem.Allocator, value: []const u8) !Self {
         return Self{
             .parent = null,
             .value = .{.String = try allocator.dupeZ(u8, value)},
-            .children = std.ArrayList(Node).init(allocator),
+            .children = std.ArrayList(ZNode).init(allocator),
         };
     }
 
-    /// Create a `.StringRef` `Node`. This is a string not managed by the node.
+    /// Create a `.StringRef` `ZNode`. This is a string not managed by the node.
     pub fn initStringRef(allocator: *std.mem.Allocator, value: []const u8) !Self {
         return Self{
             .parent = null,
             .value = .{.StringRef = value},
-            .children = std.ArrayList(Node).init(allocator),
+            .children = std.ArrayList(ZNode).init(allocator),
         };
     }
 
-    /// Create a `.Integer` `Node`.
+    /// Create a `.Integer` `ZNode`.
     pub fn initInteger(allocator: *std.mem.Allocator, value: i32) Self {
         return Self{
             .parent = null,
             .value = .{.Integer = value},
-            .children = std.ArrayList(Node).init(allocator),
+            .children = std.ArrayList(ZNode).init(allocator),
         };
     }
 
-    /// Create a `.Float` `Node`.
+    /// Create a `.Float` `ZNode`.
     pub fn initFloat(allocator: *std.mem.Allocator, value: f32) Self {
         return Self{
             .parent = null,
             .value = .{.Float = value},
-            .children = std.ArrayList(Node).init(allocator),
+            .children = std.ArrayList(ZNode).init(allocator),
         };
     }
 
-    /// Create a `.Boolean` `Node`.
+    /// Create a `.Boolean` `ZNode`.
     pub fn initBoolean(allocator: *std.mem.Allocator, value: bool) Self {
         return Self{
             .parent = null,
             .value = .{.Boolean = value},
-            .children = std.ArrayList(Node).init(allocator),
+            .children = std.ArrayList(ZNode).init(allocator),
         };
     }
 
-    /// Sets the `Node`s value to `.Null`. Frees any memory currently allocated.
+    /// Sets the `ZNode`s value to `.Null`. Frees any memory currently allocated.
     pub fn setNull(self: *Self) void {
         if (self.value == .String) {
             self.children.allocator.free(self.value.String);
@@ -617,7 +617,7 @@ pub const Node = struct {
         self.value = .Null;
     }
 
-    /// Sets the `Node`s value to `.String`. Frees any memory currently allocated.
+    /// Sets the `ZNode`s value to `.String`. Frees any memory currently allocated.
     pub fn setString(self: *Self, value: []const u8) !void {
         if (self.value == .String) {
             self.children.allocator.free(self.value.String);
@@ -625,7 +625,7 @@ pub const Node = struct {
         self.value = .{.String = try self.children.allocator.dupeZ(u8, value)};
     }
 
-    /// Sets the `Node`s value to `.StringRef`. Frees any memory currently allocated.
+    /// Sets the `ZNode`s value to `.StringRef`. Frees any memory currently allocated.
     pub fn setStringRef(self: *Self, value: []const u8) !void {
         if (self.value == .String) {
             self.children.allocator.free(self.value.String);
@@ -633,7 +633,7 @@ pub const Node = struct {
         self.value = .{.StringRef = value};
     }
 
-    /// Sets the `Node`s value to `.Integer`. Frees any memory currently allocated.
+    /// Sets the `ZNode`s value to `.Integer`. Frees any memory currently allocated.
     pub fn setInteger(self: *Self, value: i32) void {
         if (self.value == .String) {
             self.children.allocator.free(self.value.String);
@@ -641,7 +641,7 @@ pub const Node = struct {
         self.value = .{.Integer = value};
     }
 
-    /// Sets the `Node`s value to `.Float`. Frees any memory currently allocated.
+    /// Sets the `ZNode`s value to `.Float`. Frees any memory currently allocated.
     pub fn setFloat(self: *Self, value: f32) void {
         if (self.value == .String) {
             self.children.allocator.free(self.value.String);
@@ -649,7 +649,7 @@ pub const Node = struct {
         self.value = .{.Float = value};
     }
 
-    /// Sets the `Node`s value to `.Boolean`. Frees any memory currently allocated.
+    /// Sets the `ZNode`s value to `.Boolean`. Frees any memory currently allocated.
     pub fn setBoolean(self: *Self, value: bool) void {
         if (self.value == .String) {
             self.children.allocator.free(self.value.String);
@@ -657,7 +657,7 @@ pub const Node = struct {
         self.value = .{.Boolean = value};
     }
 
-    /// Returns true if this `Node`s value is of `.Null`.
+    /// Returns true if this `ZNode`s value is of `.Null`.
     pub fn isNull(self: *const Self) bool {
         if (self.value == .Null) {
             return true;
@@ -665,7 +665,7 @@ pub const Node = struct {
         return false;
     }
 
-    /// Returns a reference to the string if this `Node`s value is one of `.String` or `.StringRef`.
+    /// Returns a reference to the string if this `ZNode`s value is one of `.String` or `.StringRef`.
     pub fn getString(self: *const Self) ?[]const u8 {
         if (self.value == .String) {
             return self.value.String;
@@ -676,7 +676,7 @@ pub const Node = struct {
         return null;
     }
 
-    /// Returns the integer if this `Node`s value is of `.Integer`.
+    /// Returns the integer if this `ZNode`s value is of `.Integer`.
     pub fn getInteger(self: *const Self) ?i32 {
         if (self.value == .Integer) {
             return self.value.Integer;
@@ -684,7 +684,7 @@ pub const Node = struct {
         return null;
     }
 
-    /// Returns the float if this `Node`s value is of `.Float`.
+    /// Returns the float if this `ZNode`s value is of `.Float`.
     pub fn getFloat(self: *const Self) ?f32 {
         if (self.value == .Float) {
             return self.value.Float;
@@ -692,7 +692,7 @@ pub const Node = struct {
         return null;
     }
 
-    /// Returns the boolean if this `Node`s value is of `.Boolean`.
+    /// Returns the boolean if this `ZNode`s value is of `.Boolean`.
     pub fn getBoolean(self: *const Self) ?bool {
         if (self.value == .Boolean) {
             return self.value.Boolean;
@@ -700,7 +700,7 @@ pub const Node = struct {
         return null;
     }
 
-    /// Clears and frees all children under this `Node`.
+    /// Clears and frees all children under this `ZNode`.
     pub fn clearChildren(self: *Self) void {
         for (self.getChildren()) |*child| {
             child.deinit();
@@ -710,7 +710,7 @@ pub const Node = struct {
         }
     }
 
-    /// Frees the memory associated with the `Node` and its children.
+    /// Frees the memory associated with the `ZNode` and its children.
     pub fn deinit(self: *const Self) void {
         switch (self.value) {
             // Use the ArrayLists's allocator, heh. Why store an extra pointer?
@@ -723,84 +723,84 @@ pub const Node = struct {
         self.children.deinit();
     }
 
-    /// Appends a `.Null` `Node` to this `Node`s children.
-    pub fn appendNull(self: *Self) !*Node {
-        var node = Node.initNull(self.children.allocator);
+    /// Appends a `.Null` `ZNode` to this `ZNode`s children.
+    pub fn appendNull(self: *Self) !*ZNode {
+        var node = ZNode.initNull(self.children.allocator);
         node.parent = self;
         try self.children.append(node);
         return &self.children.items[self.children.items.len - 1];
     }
 
-    /// Appends a `.String` `Node` to this `Node`s children.
-    pub fn appendString(self: *Self, string: []const u8) !*Node {
-        var node = try Node.initString(self.children.allocator, string);
-        node.parent = self;
-        errdefer node.deinit();
-        try self.children.append(node);
-        return &self.children.items[self.children.items.len - 1];
-    }
-
-    /// Appends a `.StringRef` `Node` to this `Node`s children.
-    pub fn appendStringRef(self: *Self, string: []const u8) !*Node {
-        var node = try Node.initStringRef(self.children.allocator, string);
+    /// Appends a `.String` `ZNode` to this `ZNode`s children.
+    pub fn appendString(self: *Self, string: []const u8) !*ZNode {
+        var node = try ZNode.initString(self.children.allocator, string);
         node.parent = self;
         errdefer node.deinit();
         try self.children.append(node);
         return &self.children.items[self.children.items.len - 1];
     }
 
-    /// Appends a `.Integer` `Node` to this `Node`s children.
-    pub fn appendInteger(self: *Self, integer: i32) !*Node {
-        var node = Node.initInteger(self.children.allocator, integer);
+    /// Appends a `.StringRef` `ZNode` to this `ZNode`s children.
+    pub fn appendStringRef(self: *Self, string: []const u8) !*ZNode {
+        var node = try ZNode.initStringRef(self.children.allocator, string);
         node.parent = self;
         errdefer node.deinit();
         try self.children.append(node);
         return &self.children.items[self.children.items.len - 1];
     }
 
-    /// Appends a `.Float` `Node` to this `Node`s children.
-    pub fn appendFloat(self: *Self, float: f32) !*Node {
-        var node = Node.initFloat(self.children.allocator, float);
+    /// Appends a `.Integer` `ZNode` to this `ZNode`s children.
+    pub fn appendInteger(self: *Self, integer: i32) !*ZNode {
+        var node = ZNode.initInteger(self.children.allocator, integer);
         node.parent = self;
         errdefer node.deinit();
         try self.children.append(node);
         return &self.children.items[self.children.items.len - 1];
     }
 
-    /// Appends a `.Boolean` `Node` to this `Node`s children.
-    pub fn appendBoolean(self: *Self, boolean: bool) !*Node {
-        var node = Node.initBoolean(self.children.allocator, boolean);
+    /// Appends a `.Float` `ZNode` to this `ZNode`s children.
+    pub fn appendFloat(self: *Self, float: f32) !*ZNode {
+        var node = ZNode.initFloat(self.children.allocator, float);
         node.parent = self;
         errdefer node.deinit();
         try self.children.append(node);
         return &self.children.items[self.children.items.len - 1];
     }
 
-    /// Returns true if this `Node` has no children.
+    /// Appends a `.Boolean` `ZNode` to this `ZNode`s children.
+    pub fn appendBoolean(self: *Self, boolean: bool) !*ZNode {
+        var node = ZNode.initBoolean(self.children.allocator, boolean);
+        node.parent = self;
+        errdefer node.deinit();
+        try self.children.append(node);
+        return &self.children.items[self.children.items.len - 1];
+    }
+
+    /// Returns true if this `ZNode` has no children.
     pub inline fn isLeaf(self: *const Self) bool {
         return self.children.items.len == 0;
     }
 
     /// Returns the slice of the children. Becomes invalid after any appends or clears.
-    pub inline fn getChildren(self: *const Self) std.ArrayList(Node).Slice {
+    pub inline fn getChildren(self: *const Self) std.ArrayList(ZNode).Slice {
         return self.children.items;
     }
 
     /// Returns the `nth` child or null.
-    pub inline fn getChild(self: *const Self, nth: usize) ?*Node {
+    pub inline fn getChild(self: *const Self, nth: usize) ?*ZNode {
         if (nth < self.children.items.len) {
             return &self.children.items[nth];
         }
         return null;
     }
 
-    /// Returns the number of children this `Node` has.
+    /// Returns the number of children this `ZNode` has.
     pub inline fn getChildCount(self: *const Self) usize {
         return self.children.items.len;
     }
 
     /// Finds the `nth` child with the value of `.Null`.
-    pub fn findNull(self: *const Self, nth: usize) ?*Node {
+    pub fn findNull(self: *const Self, nth: usize) ?*ZNode {
         var i: usize = 0;
         for (self.getChildren()) |*child| {
             if (child.*.value == .Null) {
@@ -814,7 +814,7 @@ pub const Node = struct {
     }
 
     /// Finds the `nth` child with the value of `.String` matching the passed string.
-    pub fn findString(self: *const Self, string: []const u8, nth: usize) ?*Node {
+    pub fn findString(self: *const Self, string: []const u8, nth: usize) ?*ZNode {
         var i: usize = 0;
         for (self.getChildren()) |*child| {
             if (child.*.value == .String or child.*.value == .StringRef) {
@@ -834,7 +834,7 @@ pub const Node = struct {
     }
 
     /// Finds the `nth` child with the value of `.String`.
-    pub fn findAnyString(self: *const Self, nth: usize) ?*Node {
+    pub fn findAnyString(self: *const Self, nth: usize) ?*ZNode {
         var i: usize = 0;
         for (self.getChildren()) |*child| {
             if (child.*.value == .String or child.*.value == .StringRef) {
@@ -848,7 +848,7 @@ pub const Node = struct {
     }
 
     /// Finds the `nth` child with the value of `.Integer` matching the passed integer.
-    pub fn findInteger(self: *const Self, int: i32, nth: usize) ?*Node {
+    pub fn findInteger(self: *const Self, int: i32, nth: usize) ?*ZNode {
         var i: usize = 0;
         for (self.getChildren()) |*child| {
             if (child.*.value == .Integer and child.*.value.Integer == int) {
@@ -862,7 +862,7 @@ pub const Node = struct {
     }
 
     /// Finds the `nth` child with the value of `.Integer`.
-    pub fn findAnyInteger(self: *const Self, nth: usize) ?*Node {
+    pub fn findAnyInteger(self: *const Self, nth: usize) ?*ZNode {
         var i: usize = 0;
         for (self.getChildren()) |*child| {
             if (child.*.value == .Integer) {
@@ -876,7 +876,7 @@ pub const Node = struct {
     }
 
     /// Finds the `nth` child with the value of `.Float` matching the passed float using `approxEq`.
-    pub fn findFloat(self: *const Self, float: f32, nth: usize) ?*Node {
+    pub fn findFloat(self: *const Self, float: f32, nth: usize) ?*ZNode {
         var i: usize = 0;
         for (self.getChildren()) |*child| {
             if (child.*.value == .Float and std.math.approxEq(f32, child.*.value.Float, float, std.math.f32_epsilon)) {
@@ -890,7 +890,7 @@ pub const Node = struct {
     }
 
     /// Finds the `nth` child with the value of `.Float`.
-    pub fn findAnyFloat(self: *const Self, nth: usize) ?*Node {
+    pub fn findAnyFloat(self: *const Self, nth: usize) ?*ZNode {
         var i: usize = 0;
         for (self.getChildren()) |*child| {
             if (child.*.value == .Float) {
@@ -904,7 +904,7 @@ pub const Node = struct {
     }
 
     /// Finds the `nth` child with the value of `.Boolean` matching the passed bool.
-    pub fn findBoolean(self: *const Self, boolean: bool, nth: usize) ?*Node {
+    pub fn findBoolean(self: *const Self, boolean: bool, nth: usize) ?*ZNode {
         var i: usize = 0;
         for (self.getChildren()) |*child| {
             if (child.*.value == .Boolean and child.*.value.Boolean == boolean) {
@@ -918,7 +918,7 @@ pub const Node = struct {
     }
 
     /// Finds the `nth` child with the value of `.Boolean`.
-    pub fn findAnyBoolean(self: *const Self, nth: usize) ?*Node {
+    pub fn findAnyBoolean(self: *const Self, nth: usize) ?*ZNode {
         var i: usize = 0;
         for (self.getChildren()) |*child| {
             if (child.*.value == .Boolean) {
@@ -950,7 +950,7 @@ pub const Node = struct {
 
 test "node initialization and setting" {
     const testing = std.testing;
-    var root = Node.initNull(testing.allocator);
+    var root = ZNode.initNull(testing.allocator);
     defer root.deinit();
 
     testing.expect(root.isNull());
@@ -970,7 +970,7 @@ test "node initialization and setting" {
 test "node appending and searching" {
     const testing = std.testing;
 
-    var root = Node.initNull(testing.allocator);
+    var root = ZNode.initNull(testing.allocator);
     defer root.deinit();
 
     var nullChild = try root.appendNull();
@@ -1015,19 +1015,19 @@ test "node appending and searching" {
 /// Max number of `Transformer`.
 pub const MAX_TRANSFORMERS = 8;
 /// Transformer function. Level is tree depth past root, so top depth nodes have a depth of 0.
-pub const Transformer = fn(new_node: *Node, depth: usize) anyerror!void;
+pub const Transformer = fn(new_node: *ZNode, depth: usize) anyerror!void;
 
 /// Parsing options, including custom `Transformer` to control how or if to translate strings.
 pub const ParseOptions = struct {
-    /// Enabled owned strings in output `Node`. By defaults nodes reference the source text.
+    /// Enabled owned strings in output `ZNode`. By defaults nodes reference the source text.
     owned_strings: bool = false,
     /// Use the default `Transformer` (tries translating to float->int->bool).
     use_default_transformer: bool = true,
-    /// Custom `Transformer`. `Transformers` are called in order on each new `Node`.
+    /// Custom `Transformer`. `Transformers` are called in order on each new `ZNode`.
     transformers: [MAX_TRANSFORMERS]?Transformer = [_]?Transformer{null} ** MAX_TRANSFORMERS,
 };
 
-fn defaultTransformer(new_node: *Node, depth: usize) !void {
+fn defaultTransformer(new_node: *ZNode, depth: usize) !void {
     // Try to cast to numbers, then true/false checks, then string.
     const slice = new_node.getString() orelse unreachable;
     const integer = std.fmt.parseInt(i32, slice, 10) catch |_| {
@@ -1047,7 +1047,7 @@ fn defaultTransformer(new_node: *Node, depth: usize) !void {
     new_node.setInteger(integer);
 }
 
-fn parseText(stream: *StreamingParser, idx: *usize, text: []const u8) !?NodeToken {
+fn parseText(stream: *StreamingParser, idx: *usize, text: []const u8) !?ZNodeToken {
     while (idx.* <= text.len) {
         // Insert an extra newline at the end of the stream.
         const node = if (idx.* == text.len) try stream.feed('\n') else try stream.feed(text[idx.*]);
@@ -1059,12 +1059,12 @@ fn parseText(stream: *StreamingParser, idx: *usize, text: []const u8) !?NodeToke
     return null;
 }
 
-/// Parses a text block and returns the root `Node`. All `Node`s will just reference the text and
+/// Parses a text block and returns the root `ZNode`. All `ZNode`s will just reference the text and
 /// will not make any string allocations.
-pub fn parse(allocator: *std.mem.Allocator, options: *const ParseOptions, text: []const u8) !Node {
+pub fn parse(allocator: *std.mem.Allocator, options: *const ParseOptions, text: []const u8) !ZNode {
     const MAX_DEPTH = 256;
-    var stack: [MAX_DEPTH]*Node = undefined;
-    var node = Node.initNull(allocator);
+    var stack: [MAX_DEPTH]*ZNode = undefined;
+    var node = ZNode.initNull(allocator);
     stack[0] = &node;
     var stack_depth: usize = 0;
     errdefer stack[0].deinit();
@@ -1110,7 +1110,7 @@ pub fn parse(allocator: *std.mem.Allocator, options: *const ParseOptions, text: 
 }
 
 /// Outputs a value to the `out_stream`. This output is a parsable.
-pub fn stringifyValue(value: Value, out_stream: anytype) @TypeOf(out_stream).Error!void {
+pub fn stringifyValue(value: ZValue, out_stream: anytype) @TypeOf(out_stream).Error!void {
     switch (value) {
         .Null => {
             // Skip.
@@ -1158,8 +1158,8 @@ pub fn stringifyValue(value: Value, out_stream: anytype) @TypeOf(out_stream).Err
     }
 }
 
-/// Outputs a `Node` and its children on a single line. This can be parsed back.
-pub fn stringifyNode(node: Node, out_stream: anytype) @TypeOf(out_stream).Error!void {
+/// Outputs a `ZNode` and its children on a single line. This can be parsed back.
+pub fn stringifyNode(node: ZNode, out_stream: anytype) @TypeOf(out_stream).Error!void {
     try stringifyValue(node.value, out_stream);
     if (node.children.items.len == 0) {
         return;
@@ -1174,8 +1174,8 @@ pub fn stringifyNode(node: Node, out_stream: anytype) @TypeOf(out_stream).Error!
     try out_stream.writeAll(";");
 }
 
-/// Stringifies the root `Node`s children. Each on their own line.
-pub fn stringify(node: Node, out_stream: anytype) @TypeOf(out_stream).Error!void {
+/// Stringifies the root `ZNode`s children. Each on their own line.
+pub fn stringify(node: ZNode, out_stream: anytype) @TypeOf(out_stream).Error!void {
     for (node.children.items) |child, i| {
         try stringifyNode(child, out_stream);
         try out_stream.writeAll("\n");
