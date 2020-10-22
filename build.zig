@@ -28,6 +28,10 @@ const examples = [_]Example{
         .name = "basic-usage",
         .path = "examples/basic_usage.zig",
     },
+    Example{
+        .name = "basic-nodes",
+        .path = "examples/basic_nodes.zig",
+    },
 };
 
 pub fn build(b: *Builder) !void {

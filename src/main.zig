@@ -1187,7 +1187,9 @@ test "parsing into nodes" {
         \\elements:fire,water,air,earth;
         \\subelements:fire:lightning;water:blood;ice,air:spirit,;earth:metal;;
     ;
-    const text = \\"parent":[[ child ]]:[==[42]==];
+    const text =
+        \\name:wizard;
+        \\stats:health:10;mana:30;;
     ;
     const node = try parse(testing.allocator, &ParseOptions{.use_default_transformer = false}, text);
     node.show();
