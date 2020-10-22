@@ -11,13 +11,17 @@ zzz syntax describes a tree with as little noise as possible. It can be thought 
 
 # : describes a parent child relationship
 name: Kobold
+
 # , describes a sibling relationship
 tags: small, humanoid, lawful evil
 armor class: 12
+
 # : can appear on the same line, here (2d6 - 2) is a child of 5
 hit points: 5 : (2d6 - 2)
+
 # You can use this for meta attributes, if necessary.
 speed: 30 : ft
+
 # Continuing on a newline. Indentation is exact to describe a parent/child relationship
 stats
   str:7:-2
@@ -26,10 +30,12 @@ stats
   int:8:-1
   wis:7:-2
   cha:8:-1
+
 # ; can be used to go up in the tree. Here we ascend up from the "ft" meta node
 senses: darkvision:60:ft;; passive perception:8
 languages: common, draconic
 challenge: 1:8
+
 # Multline strings follow the same rules as Lua's. The first newline on an empty line is skipped
 abilities
   sunlight sensitivity:[[

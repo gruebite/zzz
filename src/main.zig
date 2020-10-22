@@ -301,9 +301,12 @@ pub const StreamingParser = struct {
                         .end = self.current_index - self.trailing_spaces,
                     };
                     self.start_index = self.current_index + 1;
-                    self.max_level = self.line_level + 1;
+                    // Only reset on a non open line.
+                    if (self.node_level > 0) {
+                        self.max_level = self.line_level + 1;
+                        self.line_level = 0;
+                    }
                     self.node_level = 0;
-                    self.line_level = 0;
                     // Only return something if there is something. Quoted strings are good.
                     if (self.state == .OpenCharacter) {
                         return node;
@@ -451,6 +454,7 @@ test "parsing slice output" {
         \\  # another
         \\  : n : "en"  ,  [[m]]
         \\    # more
+        \\
         \\    "sc"   :  [[10]]   ,    g #inline
         \\  [[]]:[==[
         \\hi]==]
@@ -492,6 +496,9 @@ test "parsing levels" {
         \\  # another
         \\  : n : "en"  ,  [[m]]
         \\    # more
+        \\
+        \\    # even more
+        \\
         \\    "sc"   :  [[10]]   ,    g #inline
         \\  [[]]:[==[
         \\hi]==]
