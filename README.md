@@ -125,7 +125,7 @@ null -> "parent" -> "child"
                  -> "sibling"
 ```
 
-### zzz can contain strings, integers (i32), floats (f32), boolean, and nulls:
+### this implement can also contain integers (i32), floats (f32), boolean, and nulls:
 ```
 string:42:42.0:true::
 ```

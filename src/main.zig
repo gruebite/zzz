@@ -96,7 +96,7 @@ const std = @import("std");
 pub const NodeToken = struct {
     const Self = @This();
     /// 0 is top level children.
-    level: usize,
+    depth: usize,
     /// The extent of the slice.
     start: usize,
     end: usize,
@@ -109,12 +109,12 @@ pub const StreamingParser = struct {
     state: State,
     start_index: usize,
     current_index: usize,
-    // The maximum node level.
-    max_level: usize,
-    // The current line's level.
-    line_level: usize,
-    // The current node level.
-    node_level: usize,
+    // The maximum node depth.
+    max_depth: usize,
+    // The current line's depth.
+    line_depth: usize,
+    // The current node depth.
+    node_depth: usize,
     /// Level of multiline string.
     open_string_level: usize,
     /// Current level of multiline string close.
@@ -165,9 +165,9 @@ pub const StreamingParser = struct {
         self.state = .OpenLine;
         self.start_index = 0;
         self.current_index = 0;
-        self.max_level = 0;
-        self.line_level = 0;
-        self.node_level = 0;
+        self.max_depth = 0;
+        self.line_depth = 0;
+        self.node_depth = 0;
         self.open_string_level = 0;
         self.close_string_level = 0;
         self.trailing_spaces = 0;
@@ -191,10 +191,10 @@ pub const StreamingParser = struct {
                     self.start_index = self.current_index + 1;
                     // We're ending a line with nodes.
                     if (self.state == .Comment) {
-                        self.max_level = self.line_level + 1;
+                        self.max_depth = self.line_depth + 1;
                     }
-                    self.node_level = 0;
-                    self.line_level = 0;
+                    self.node_depth = 0;
+                    self.line_depth = 0;
                     self.state = .OpenLine;
                 },
                 else => {
@@ -210,7 +210,7 @@ pub const StreamingParser = struct {
                         defer self.state = .Comment;
                         if (self.state == .OpenCharacter) {
                             return NodeToken{
-                                .level = self.line_level + self.node_level,
+                                .depth = self.line_depth + self.node_depth,
                                 .start = self.start_index,
                                 .end = self.current_index - self.trailing_spaces,
                             };
@@ -220,7 +220,7 @@ pub const StreamingParser = struct {
                 // The tricky character (and other whitespace).
                 ' ' => {
                     if (self.state == .OpenLine) {
-                        if (self.line_level >= self.max_level) {
+                        if (self.line_depth >= self.max_depth) {
                             return Error.TooMuchIndentation;
                         }
                         self.state = .Indent;
@@ -236,12 +236,12 @@ pub const StreamingParser = struct {
                 ':' => {
                     defer self.state = .ExpectNode;
                     const node = NodeToken{
-                        .level = self.line_level + self.node_level,
+                        .depth = self.line_depth + self.node_depth,
                         .start = self.start_index,
                         .end = self.current_index - self.trailing_spaces,
                     };
                     self.start_index = self.current_index + 1;
-                    self.node_level += 1;
+                    self.node_depth += 1;
                     // Only return when we're not at end of a string.
                     if (self.state != .EndString) {
                         return node;
@@ -250,7 +250,7 @@ pub const StreamingParser = struct {
                 ',' => {
                     defer self.state = .ExpectNode;
                     const node = NodeToken{
-                        .level = self.line_level + self.node_level,
+                        .depth = self.line_depth + self.node_depth,
                         .start = self.start_index,
                         .end = self.current_index - self.trailing_spaces,
                     };
@@ -261,17 +261,17 @@ pub const StreamingParser = struct {
                     }
                 },
                 ';' => {
-                    if (self.node_level == 0) {
+                    if (self.node_depth == 0) {
                         return Error.SemicolonWentPastRoot;
                     }
                     defer self.state = .ExpectNode;
                     const node = NodeToken{
-                        .level = self.line_level + self.node_level,
+                        .depth = self.line_depth + self.node_depth,
                         .start = self.start_index,
                         .end = self.current_index - self.trailing_spaces,
                     };
                     self.start_index = self.current_index + 1;
-                    self.node_level -= 1;
+                    self.node_depth -= 1;
                     // Only return when we're not at end of a string, or in semicolons
                     // special case, when we don't have an empty string.
                     if (self.state != .EndString and node.start < node.end) {
@@ -296,17 +296,17 @@ pub const StreamingParser = struct {
                 '\n' => {
                     defer self.state = .OpenLine;
                     const node = NodeToken{
-                        .level = self.line_level + self.node_level,
+                        .depth = self.line_depth + self.node_depth,
                         .start = self.start_index,
                         .end = self.current_index - self.trailing_spaces,
                     };
                     self.start_index = self.current_index + 1;
                     // Only reset on a non open line.
-                    if (self.node_level > 0) {
-                        self.max_level = self.line_level + 1;
-                        self.line_level = 0;
+                    if (self.node_depth > 0) {
+                        self.max_depth = self.line_depth + 1;
+                        self.line_depth = 0;
                     }
-                    self.node_level = 0;
+                    self.node_depth = 0;
                     // Only return something if there is something. Quoted strings are good.
                     if (self.state == .OpenCharacter) {
                         return node;
@@ -331,7 +331,7 @@ pub const StreamingParser = struct {
             .Indent => switch (c) {
                 ' ' => {
                     self.start_index = self.current_index + 1;
-                    self.line_level += 1;
+                    self.line_depth += 1;
                     self.state = .OpenLine;
                 },
                 else => {
@@ -342,7 +342,7 @@ pub const StreamingParser = struct {
                 '"' => {
                     self.state = .EndString;
                     const node = NodeToken{
-                        .level = self.line_level + self.node_level,
+                        .depth = self.line_depth + self.node_depth,
                         .start = self.start_index,
                         .end = self.current_index,
                     };
@@ -358,7 +358,7 @@ pub const StreamingParser = struct {
                 '"' => {
                     self.state = .EndString;
                     const node = NodeToken{
-                        .level = self.line_level + self.node_level,
+                        .depth = self.line_depth + self.node_depth,
                         .start = self.start_index,
                         .end = self.current_index,
                     };
@@ -416,7 +416,7 @@ pub const StreamingParser = struct {
                     if (self.close_string_level == self.open_string_level) {
                         self.state = .EndString;
                         return NodeToken{
-                            .level = self.line_level + self.node_level,
+                            .depth = self.line_depth + self.node_depth,
                             .start = self.start_index,
                             .end = self.current_index - self.open_string_level - 1,
                         };
@@ -480,13 +480,13 @@ fn testNextLevelOrError(stream: *StreamingParser, idx: *usize, text: []const u8)
         const node = try stream.feed(text[idx.*]);
         idx.* += 1;
         if (node) |n| {
-            return n.level;
+            return n.depth;
         }
     }
     return error.ExhaustedLoop;
 }
 
-test "parsing levels" {
+test "parsing depths" {
     const testing = std.testing;
 
     const text =
@@ -545,13 +545,13 @@ pub const Node = struct {
 
     /// Turns the `Node`s string value into a dynamic one if it isn't one already. Optionally
     /// recurses children. Essentially enforces ownership of string contents.
-    pub fn makeDynamic(self: *Self, recurse: bool) void {
+    pub fn makeDynamic(self: *Self, recurse: bool) anyerror!void {
         if (self.value == .StringRef) {
-            self.setString(self.value.StringRef);
+            try self.setString(self.value.StringRef);
         }
         if (recurse) {
             for (self.getChildren()) |*child| {
-                child.*.makeDynamic(recurse);
+                try child.*.makeDynamic(recurse);
             }
         }
     }
@@ -997,10 +997,44 @@ test "node appending and searching" {
     testing.expect(root.findAnyBoolean(1) == null);
     testing.expect(root.findBoolean(true, 1) == null);
 
-    root.show();
-
     root.clearChildren();
     testing.expect(root.isLeaf());
+}
+
+/// Max number of `Transformer`.
+pub const MAX_TRANSFORMERS = 8;
+/// Transformer function. Parent will never be null. Level is tree depth past root, so top depth
+/// nodes have a depth of 0.
+pub const Transformer = fn(parent: *const Node, new_node: *Node, depth: usize) anyerror!void;
+
+/// Parsing options, including custom `Transformer` to control how or if to translate strings.
+pub const ParseOptions = struct {
+    /// Enabled owned strings in output `Node`. By defaults nodes reference the source text.
+    owned_strings: bool = false,
+    /// Use the default `Transformer` (tries translating to float->int->bool).
+    use_default_transformer: bool = true,
+    /// Custom `Transformer`. `Transformers` are called in order on each new `Node`.
+    transformers: [MAX_TRANSFORMERS]?Transformer = [_]?Transformer{null} ** MAX_TRANSFORMERS,
+};
+
+fn defaultTransformer(parent: *const Node, new_node: *Node, depth: usize) !void {
+    // Try to cast to numbers, then true/false checks, then string.
+    const slice = new_node.getString() orelse unreachable;
+    const integer = std.fmt.parseInt(i32, slice, 10) catch |_| {
+        const float = std.fmt.parseFloat(f32, slice) catch |_| {
+            if (std.mem.eql(u8, "true", slice)) {
+                new_node.setBoolean(true);
+            } else if (std.mem.eql(u8, "false", slice)) {
+                new_node.setBoolean(false);
+            } else {
+                // Do nothing.
+            }
+            return;
+        };
+        new_node.setFloat(float);
+        return;
+    };
+    new_node.setInteger(integer);
 }
 
 fn parseText(stream: *StreamingParser, idx: *usize, text: []const u8) !?NodeToken {
@@ -1017,53 +1051,50 @@ fn parseText(stream: *StreamingParser, idx: *usize, text: []const u8) !?NodeToke
 
 /// Parses a text block and returns the root `Node`. All `Node`s will just reference the text and
 /// will not make any string allocations.
-pub fn parse(allocator: *std.mem.Allocator, text: []const u8) !Node {
+pub fn parse(allocator: *std.mem.Allocator, options: *const ParseOptions, text: []const u8) !Node {
     const MAX_DEPTH = 256;
     var stack: [MAX_DEPTH]*Node = undefined;
     var node = Node.initNull(allocator);
     stack[0] = &node;
-    var stack_level: usize = 0;
+    var stack_depth: usize = 0;
     errdefer stack[0].deinit();
 
     var stream = StreamingParser.init();
     var idx: usize = 0;
     while (try parseText(&stream, &idx, text)) |token| {
         const slice = text[token.start..token.end];
-        if (token.level <= stack_level) {
-            stack_level = token.level;
-        } else if (token.level == stack_level + 1) {
+        if (token.depth <= stack_depth) {
+            stack_depth = token.depth;
+        } else if (token.depth == stack_depth + 1) {
             // Descend.
-            const len = stack[stack_level].children.items.len;
-            stack[stack_level + 1] = &stack[stack_level].children.items[len - 1];
-            stack_level += 1;
+            const len = stack[stack_depth].children.items.len;
+            stack[stack_depth + 1] = &stack[stack_depth].children.items[len - 1];
+            stack_depth += 1;
         } else {
             // Levels shouldn't increase by more than one.
             unreachable;
         }
         if (slice.len == 0) {
-            _ = try stack[stack_level].appendNull();
+            _ = try stack[stack_depth].appendNull();
             continue;
         }
-        // Try to cast to numbers, then true/false checks, then string.
-        const integer = std.fmt.parseInt(i32, slice, 10) catch |_| {
-            const float = std.fmt.parseFloat(f32, slice) catch |_| {
-                if (std.mem.eql(u8, "true", slice)) {
-                    _ = try stack[stack_level].appendBoolean(true);
-                } else if (std.mem.eql(u8, "false", slice)) {
-                    _ = try stack[stack_level].appendBoolean(false);
-                } else {
-                    _ = try stack[stack_level].appendStringRef(slice);
-                }
-                continue;
-            };
-            _ = try stack[stack_level].appendFloat(float);
-            continue;
-        };
-        _ = try stack[stack_level].appendInteger(integer);
+        var new_node = try stack[stack_depth].appendStringRef(slice);
+        const parent = stack[stack_depth];
+        if (options.use_default_transformer) {
+            try defaultTransformer(parent, new_node, stack_depth);
+        }
+        var trans_idx: usize = 0;
+        while (options.transformers[trans_idx]) |tf| : (trans_idx += 1)  {
+            try tf(parent, new_node, stack_depth);
+        }
     }
 
     if (!stream.hasCompleted()) {
         return error.UnfinishedString;
+    }
+
+    if (options.owned_strings) {
+        try node.makeDynamic(true);
     }
 
     return node;
@@ -1156,11 +1187,12 @@ test "parsing into nodes" {
         \\elements:fire,water,air,earth;
         \\subelements:fire:lightning;water:blood;ice,air:spirit,;earth:metal;;
     ;
-    const text = \\"parent":[[ child ]]:[==[grand child]=]]==];
+    const text = \\"parent":[[ child ]]:[==[42]==];
     ;
-    const node = try parse(testing.allocator, text);
-    //var out = std.io.getStdOut().writer();
-    //try stringify(node, out);
+    const node = try parse(testing.allocator, &ParseOptions{.use_default_transformer = false}, text);
+    node.show();
+    var out = std.io.getStdOut().writer();
+    try stringify(node, out);
 
     defer node.deinit();
 }
