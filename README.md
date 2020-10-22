@@ -49,7 +49,7 @@ creature if at least one of the kobold's allies is within
 
 # Sparse spec
 
-A zzz file describes a tree. Special characters (and spaces) are used to go up and down the tree. The tree has an implicit null root node.
+A zzz file describes a tree of strings. Special characters (and spaces) are used to go up and down the tree. The tree has an implicit null root node.
 
 ### Descending the tree:
 ```

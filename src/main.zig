@@ -184,7 +184,7 @@ pub const StreamingParser = struct {
     /// are any unfinished strings.
     pub fn feed(self: *Self, c: u8) Error!?NodeToken {
         defer self.current_index += 1;
-        //std.debug.print("FEED<{}> {} {} ({c})\n", .{self.state, self.current_index, c, c});
+        std.debug.print("FEED<{}> {} {} ({c})\n", .{self.state, self.current_index, c, c});
         switch (self.state) {
             .OpenComment, .Comment => switch (c) {
                 '\n' => {
@@ -302,7 +302,7 @@ pub const StreamingParser = struct {
                     };
                     self.start_index = self.current_index + 1;
                     // Only reset on a non open line.
-                    if (self.node_depth > 0) {
+                    if (self.state != .OpenLine) {
                         self.max_depth = self.line_depth + 1;
                         self.line_depth = 0;
                     }
@@ -453,8 +453,6 @@ test "parsing slice output" {
         \\[[sy]]
         \\  # another
         \\  : n : "en"  ,  [[m]]
-        \\    # more
-        \\
         \\    "sc"   :  [[10]]   ,    g #inline
         \\  [[]]:[==[
         \\hi]==]
@@ -1189,7 +1187,9 @@ test "parsing into nodes" {
     ;
     const text =
         \\name:wizard;
-        \\stats:health:10;mana:30;;
+        \\stats
+        \\  : health:10
+        \\    mana:30
     ;
     const node = try parse(testing.allocator, &ParseOptions{.use_default_transformer = false}, text);
     node.show();
