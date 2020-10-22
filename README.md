@@ -7,7 +7,7 @@ zzz syntax describes a tree with as little noise as possible. It can be thought 
 ## Quick example
 
 ```
-# Comments begin with hashtags.
+# Comments begin with a hash symbol.
 
 # : describes a parent child relationship
 name: Kobold
