@@ -207,7 +207,14 @@ pub const StreamingParser = struct {
                     if (self.state == .OpenLine) {
                         self.state = .OpenComment;
                     } else {
-                        self.state = .Comment;
+                        defer self.state = .Comment;
+                        if (self.state == .OpenCharacter) {
+                            return NodeToken{
+                                .level = self.line_level + self.node_level,
+                                .start = self.start_index,
+                                .end = self.current_index - self.trailing_spaces,
+                            };
+                        }
                     }
                 },
                 // The tricky character (and other whitespace).
@@ -438,10 +445,13 @@ test "parsing slice output" {
     const testing = std.testing;
 
     const text =
+        \\# woo comment
         \\mp:10
         \\[[sy]]
+        \\  # another
         \\  : n : "en"  ,  [[m]]
-        \\    "sc"   :  [[10]]   ,    g
+        \\    # more
+        \\    "sc"   :  [[10]]   ,    g #inline
         \\  [[]]:[==[
         \\hi]==]
     ;
@@ -476,10 +486,13 @@ test "parsing levels" {
     const testing = std.testing;
 
     const text =
+        \\# woo comment
         \\mp:10
         \\[[sy]]
+        \\  # another
         \\  : n : "en"  ,  [[m]]
-        \\    "sc"   :  [[10]]   ,    g
+        \\    # more
+        \\    "sc"   :  [[10]]   ,    g #inline
         \\  [[]]:[==[
         \\hi]==]
     ;
