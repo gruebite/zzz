@@ -184,7 +184,7 @@ pub const StreamingParser = struct {
     /// are any unfinished strings.
     pub fn feed(self: *Self, c: u8) Error!?NodeToken {
         defer self.current_index += 1;
-        std.debug.print("FEED<{}> {} {} ({c})\n", .{self.state, self.current_index, c, c});
+        //std.debug.print("FEED<{}> {} {} ({c})\n", .{self.state, self.current_index, c, c});
         switch (self.state) {
             .OpenComment, .Comment => switch (c) {
                 '\n' => {
@@ -535,6 +535,7 @@ pub const Value = union(enum) {
 /// A `Node` in a zzz tree. The root `Node` will have a value of `.Null`.
 pub const Node = struct {
     const Self = @This();
+    parent: ?*Node,
     /// The `Node`s value.
     value: Value,
     /// The `Node`s children. Should really have to access this directly, but through the use
@@ -557,6 +558,7 @@ pub const Node = struct {
     /// Create a `.Null` `Node`.
     pub fn initNull(allocator: *std.mem.Allocator) Self {
         return Self{
+            .parent = null,
             .value = .Null,
             .children = std.ArrayList(Node).init(allocator),
         };
@@ -565,6 +567,7 @@ pub const Node = struct {
     /// Create a `.String` `Node`. The string is managed by the node.
     pub fn initString(allocator: *std.mem.Allocator, value: []const u8) !Self {
         return Self{
+            .parent = null,
             .value = .{.String = try allocator.dupeZ(u8, value)},
             .children = std.ArrayList(Node).init(allocator),
         };
@@ -573,6 +576,7 @@ pub const Node = struct {
     /// Create a `.StringRef` `Node`. This is a string not managed by the node.
     pub fn initStringRef(allocator: *std.mem.Allocator, value: []const u8) !Self {
         return Self{
+            .parent = null,
             .value = .{.StringRef = value},
             .children = std.ArrayList(Node).init(allocator),
         };
@@ -581,6 +585,7 @@ pub const Node = struct {
     /// Create a `.Integer` `Node`.
     pub fn initInteger(allocator: *std.mem.Allocator, value: i32) Self {
         return Self{
+            .parent = null,
             .value = .{.Integer = value},
             .children = std.ArrayList(Node).init(allocator),
         };
@@ -589,6 +594,7 @@ pub const Node = struct {
     /// Create a `.Float` `Node`.
     pub fn initFloat(allocator: *std.mem.Allocator, value: f32) Self {
         return Self{
+            .parent = null,
             .value = .{.Float = value},
             .children = std.ArrayList(Node).init(allocator),
         };
@@ -597,6 +603,7 @@ pub const Node = struct {
     /// Create a `.Boolean` `Node`.
     pub fn initBoolean(allocator: *std.mem.Allocator, value: bool) Self {
         return Self{
+            .parent = null,
             .value = .{.Boolean = value},
             .children = std.ArrayList(Node).init(allocator),
         };
@@ -718,14 +725,16 @@ pub const Node = struct {
 
     /// Appends a `.Null` `Node` to this `Node`s children.
     pub fn appendNull(self: *Self) !*Node {
-        const node = Node.initNull(self.children.allocator);
+        var node = Node.initNull(self.children.allocator);
+        node.parent = self;
         try self.children.append(node);
         return &self.children.items[self.children.items.len - 1];
     }
 
     /// Appends a `.String` `Node` to this `Node`s children.
     pub fn appendString(self: *Self, string: []const u8) !*Node {
-        const node = try Node.initString(self.children.allocator, string);
+        var node = try Node.initString(self.children.allocator, string);
+        node.parent = self;
         errdefer node.deinit();
         try self.children.append(node);
         return &self.children.items[self.children.items.len - 1];
@@ -733,7 +742,8 @@ pub const Node = struct {
 
     /// Appends a `.StringRef` `Node` to this `Node`s children.
     pub fn appendStringRef(self: *Self, string: []const u8) !*Node {
-        const node = try Node.initStringRef(self.children.allocator, string);
+        var node = try Node.initStringRef(self.children.allocator, string);
+        node.parent = self;
         errdefer node.deinit();
         try self.children.append(node);
         return &self.children.items[self.children.items.len - 1];
@@ -741,7 +751,8 @@ pub const Node = struct {
 
     /// Appends a `.Integer` `Node` to this `Node`s children.
     pub fn appendInteger(self: *Self, integer: i32) !*Node {
-        const node = Node.initInteger(self.children.allocator, integer);
+        var node = Node.initInteger(self.children.allocator, integer);
+        node.parent = self;
         errdefer node.deinit();
         try self.children.append(node);
         return &self.children.items[self.children.items.len - 1];
@@ -749,7 +760,8 @@ pub const Node = struct {
 
     /// Appends a `.Float` `Node` to this `Node`s children.
     pub fn appendFloat(self: *Self, float: f32) !*Node {
-        const node = Node.initFloat(self.children.allocator, float);
+        var node = Node.initFloat(self.children.allocator, float);
+        node.parent = self;
         errdefer node.deinit();
         try self.children.append(node);
         return &self.children.items[self.children.items.len - 1];
@@ -757,7 +769,8 @@ pub const Node = struct {
 
     /// Appends a `.Boolean` `Node` to this `Node`s children.
     pub fn appendBoolean(self: *Self, boolean: bool) !*Node {
-        const node = Node.initBoolean(self.children.allocator, boolean);
+        var node = Node.initBoolean(self.children.allocator, boolean);
+        node.parent = self;
         errdefer node.deinit();
         try self.children.append(node);
         return &self.children.items[self.children.items.len - 1];
@@ -1001,9 +1014,8 @@ test "node appending and searching" {
 
 /// Max number of `Transformer`.
 pub const MAX_TRANSFORMERS = 8;
-/// Transformer function. Parent will never be null. Level is tree depth past root, so top depth
-/// nodes have a depth of 0.
-pub const Transformer = fn(parent: *const Node, new_node: *Node, depth: usize) anyerror!void;
+/// Transformer function. Level is tree depth past root, so top depth nodes have a depth of 0.
+pub const Transformer = fn(new_node: *Node, depth: usize) anyerror!void;
 
 /// Parsing options, including custom `Transformer` to control how or if to translate strings.
 pub const ParseOptions = struct {
@@ -1015,7 +1027,7 @@ pub const ParseOptions = struct {
     transformers: [MAX_TRANSFORMERS]?Transformer = [_]?Transformer{null} ** MAX_TRANSFORMERS,
 };
 
-fn defaultTransformer(parent: *const Node, new_node: *Node, depth: usize) !void {
+fn defaultTransformer(new_node: *Node, depth: usize) !void {
     // Try to cast to numbers, then true/false checks, then string.
     const slice = new_node.getString() orelse unreachable;
     const integer = std.fmt.parseInt(i32, slice, 10) catch |_| {
@@ -1077,13 +1089,12 @@ pub fn parse(allocator: *std.mem.Allocator, options: *const ParseOptions, text: 
             continue;
         }
         var new_node = try stack[stack_depth].appendStringRef(slice);
-        const parent = stack[stack_depth];
         if (options.use_default_transformer) {
-            try defaultTransformer(parent, new_node, stack_depth);
+            try defaultTransformer(new_node, stack_depth);
         }
         var trans_idx: usize = 0;
         while (options.transformers[trans_idx]) |tf| : (trans_idx += 1)  {
-            try tf(parent, new_node, stack_depth);
+            try tf(new_node, stack_depth);
         }
     }
 
