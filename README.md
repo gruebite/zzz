@@ -103,7 +103,7 @@ null -> "parent" -> "child"
                  -> "sibling"
 ```
 
-### You can only go one level deeper than the previous line's depth. Anything more is an error:
+### You can only go one level deeper than the previous lines depth. Anything more is an error:
 ```
 parent:child
     sibling
