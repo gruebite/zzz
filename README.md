@@ -176,10 +176,10 @@ null -> "\n\t\r"
 # A comment
 a node
   # Another comment
-  a sibling
+  a child
 ```
 Output:
 ```
 null -> "a node"
-     -> "a sibling"
+     -> "a child"
 ```
