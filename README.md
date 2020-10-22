@@ -125,7 +125,7 @@ null -> "parent" -> "child"
                  -> "sibling"
 ```
 
-### this implement can also contain integers (i32), floats (f32), boolean, and nulls:
+### This implementation allows for integers (i32), floats (f32), boolean, and nulls:
 ```
 string:42:42.0:true::
 ```
@@ -134,7 +134,7 @@ Output:
 null -> "string" -> 42 -> 42.0 -> true -> null
 ```
 
-### strings are trimmed, they may still contain spaces:
+### Strings are trimmed, they may still contain spaces:
 ```
 parent:     child:      grand child      ;
 ```
@@ -143,7 +143,7 @@ Output:
 null -> "parent" -> "child" -> "grand child"
 ```
 
-### strings can be quoted with double quotes or Lua strings:
+### Strings can be quoted with double quotes or Lua strings:
 ```
 "parent":[[ child ]]:[==[grand child]=]]==];
 ```
