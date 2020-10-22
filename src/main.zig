@@ -527,9 +527,9 @@ pub const ZValue = union(enum) {
     StringRef: []const u8,
     // Allocated string.
     String: []u8,
-    Integer: i32,
+    Int: i32,
     Float: f32,
-    Boolean: bool,
+    Bool: bool,
 };
 
 /// A `ZNode` in a zzz tree. The root `ZNode` will have a value of `.Null`.
@@ -582,11 +582,11 @@ pub const ZNode = struct {
         };
     }
 
-    /// Create a `.Integer` `ZNode`.
-    pub fn initInteger(allocator: *std.mem.Allocator, value: i32) Self {
+    /// Create a `.Int` `ZNode`.
+    pub fn initInt(allocator: *std.mem.Allocator, value: i32) Self {
         return Self{
             .parent = null,
-            .value = .{.Integer = value},
+            .value = .{.Int = value},
             .children = std.ArrayList(ZNode).init(allocator),
         };
     }
@@ -600,11 +600,11 @@ pub const ZNode = struct {
         };
     }
 
-    /// Create a `.Boolean` `ZNode`.
-    pub fn initBoolean(allocator: *std.mem.Allocator, value: bool) Self {
+    /// Create a `.Bool` `ZNode`.
+    pub fn initBool(allocator: *std.mem.Allocator, value: bool) Self {
         return Self{
             .parent = null,
-            .value = .{.Boolean = value},
+            .value = .{.Bool = value},
             .children = std.ArrayList(ZNode).init(allocator),
         };
     }
@@ -633,12 +633,12 @@ pub const ZNode = struct {
         self.value = .{.StringRef = value};
     }
 
-    /// Sets the `ZNode`s value to `.Integer`. Frees any memory currently allocated.
-    pub fn setInteger(self: *Self, value: i32) void {
+    /// Sets the `ZNode`s value to `.Int`. Frees any memory currently allocated.
+    pub fn setInt(self: *Self, value: i32) void {
         if (self.value == .String) {
             self.children.allocator.free(self.value.String);
         }
-        self.value = .{.Integer = value};
+        self.value = .{.Int = value};
     }
 
     /// Sets the `ZNode`s value to `.Float`. Frees any memory currently allocated.
@@ -649,12 +649,12 @@ pub const ZNode = struct {
         self.value = .{.Float = value};
     }
 
-    /// Sets the `ZNode`s value to `.Boolean`. Frees any memory currently allocated.
-    pub fn setBoolean(self: *Self, value: bool) void {
+    /// Sets the `ZNode`s value to `.Bool`. Frees any memory currently allocated.
+    pub fn setBool(self: *Self, value: bool) void {
         if (self.value == .String) {
             self.children.allocator.free(self.value.String);
         }
-        self.value = .{.Boolean = value};
+        self.value = .{.Bool = value};
     }
 
     /// Returns true if this `ZNode`s value is of `.Null`.
@@ -676,10 +676,10 @@ pub const ZNode = struct {
         return null;
     }
 
-    /// Returns the integer if this `ZNode`s value is of `.Integer`.
-    pub fn getInteger(self: *const Self) ?i32 {
-        if (self.value == .Integer) {
-            return self.value.Integer;
+    /// Returns the integer if this `ZNode`s value is of `.Int`.
+    pub fn getInt(self: *const Self) ?i32 {
+        if (self.value == .Int) {
+            return self.value.Int;
         }
         return null;
     }
@@ -692,10 +692,10 @@ pub const ZNode = struct {
         return null;
     }
 
-    /// Returns the boolean if this `ZNode`s value is of `.Boolean`.
-    pub fn getBoolean(self: *const Self) ?bool {
-        if (self.value == .Boolean) {
-            return self.value.Boolean;
+    /// Returns the boolean if this `ZNode`s value is of `.Bool`.
+    pub fn getBool(self: *const Self) ?bool {
+        if (self.value == .Bool) {
+            return self.value.Bool;
         }
         return null;
     }
@@ -749,9 +749,9 @@ pub const ZNode = struct {
         return &self.children.items[self.children.items.len - 1];
     }
 
-    /// Appends a `.Integer` `ZNode` to this `ZNode`s children.
-    pub fn appendInteger(self: *Self, integer: i32) !*ZNode {
-        var node = ZNode.initInteger(self.children.allocator, integer);
+    /// Appends a `.Int` `ZNode` to this `ZNode`s children.
+    pub fn appendInt(self: *Self, integer: i32) !*ZNode {
+        var node = ZNode.initInt(self.children.allocator, integer);
         node.parent = self;
         errdefer node.deinit();
         try self.children.append(node);
@@ -767,9 +767,9 @@ pub const ZNode = struct {
         return &self.children.items[self.children.items.len - 1];
     }
 
-    /// Appends a `.Boolean` `ZNode` to this `ZNode`s children.
-    pub fn appendBoolean(self: *Self, boolean: bool) !*ZNode {
-        var node = ZNode.initBoolean(self.children.allocator, boolean);
+    /// Appends a `.Bool` `ZNode` to this `ZNode`s children.
+    pub fn appendBool(self: *Self, boolean: bool) !*ZNode {
+        var node = ZNode.initBool(self.children.allocator, boolean);
         node.parent = self;
         errdefer node.deinit();
         try self.children.append(node);
@@ -847,11 +847,11 @@ pub const ZNode = struct {
         return null;
     }
 
-    /// Finds the `nth` child with the value of `.Integer` matching the passed integer.
-    pub fn findInteger(self: *const Self, int: i32, nth: usize) ?*ZNode {
+    /// Finds the `nth` child with the value of `.Int` matching the passed integer.
+    pub fn findInt(self: *const Self, int: i32, nth: usize) ?*ZNode {
         var i: usize = 0;
         for (self.getChildren()) |*child| {
-            if (child.*.value == .Integer and child.*.value.Integer == int) {
+            if (child.*.value == .Int and child.*.value.Int == int) {
                 if (i == nth) {
                     return child;
                 }
@@ -861,11 +861,11 @@ pub const ZNode = struct {
         return null;
     }
 
-    /// Finds the `nth` child with the value of `.Integer`.
-    pub fn findAnyInteger(self: *const Self, nth: usize) ?*ZNode {
+    /// Finds the `nth` child with the value of `.Int`.
+    pub fn findAnyInt(self: *const Self, nth: usize) ?*ZNode {
         var i: usize = 0;
         for (self.getChildren()) |*child| {
-            if (child.*.value == .Integer) {
+            if (child.*.value == .Int) {
                 if (i == nth) {
                     return child;
                 }
@@ -903,11 +903,11 @@ pub const ZNode = struct {
         return null;
     }
 
-    /// Finds the `nth` child with the value of `.Boolean` matching the passed bool.
-    pub fn findBoolean(self: *const Self, boolean: bool, nth: usize) ?*ZNode {
+    /// Finds the `nth` child with the value of `.Bool` matching the passed bool.
+    pub fn findBool(self: *const Self, boolean: bool, nth: usize) ?*ZNode {
         var i: usize = 0;
         for (self.getChildren()) |*child| {
-            if (child.*.value == .Boolean and child.*.value.Boolean == boolean) {
+            if (child.*.value == .Bool and child.*.value.Bool == boolean) {
                 if (i == nth) {
                     return child;
                 }
@@ -917,11 +917,11 @@ pub const ZNode = struct {
         return null;
     }
 
-    /// Finds the `nth` child with the value of `.Boolean`.
-    pub fn findAnyBoolean(self: *const Self, nth: usize) ?*ZNode {
+    /// Finds the `nth` child with the value of `.Bool`.
+    pub fn findAnyBool(self: *const Self, nth: usize) ?*ZNode {
         var i: usize = 0;
         for (self.getChildren()) |*child| {
-            if (child.*.value == .Boolean) {
+            if (child.*.value == .Bool) {
                 if (i == nth) {
                     return child;
                 }
@@ -946,7 +946,152 @@ pub const ZNode = struct {
     pub fn show(self: *const Self) void {
         self.show_(0);
     }
+
+    /// Projects this node into a type. If the type is a struct it must have default fields and
+    /// the types must match zzz types (can be optional): i32, f32, bool, array, []const u8.
+    /// This performs no allocations and u8 slices refer only to strings and by reference. Enums
+    /// can be mapped from string or int.
+    pub fn project(self: *const Self, comptime T: type) !T {
+        //std.debug.print("PROJECT {}\n", .{@typeInfo(T)});
+        switch (@typeInfo(T)) {
+            .Bool => {
+                if (self.getChild(0)) |child| {
+                    return switch (child.value) {
+                        .Bool => |b| b,
+                        else => error.ExpectedBoolNode,
+                    };
+                }
+                return error.NoChild;
+            },
+            .Float, .ComptimeFloat => {
+                if (self.getChild(0)) |child| {
+                    return switch (child.value) {
+                        .Float => |n| @floatCast(f32, n),
+                        else => return error.ExpectedFloatNode,
+                    };
+                }
+                return error.NoChild;
+            },
+            .Int, .ComptimeInt => {
+                if (self.getChild(0)) |child| {
+                    return switch (child.value) {
+                        .Int => |n| @intCast(i32, n),
+                        else => return error.ExpectedIntNode,
+                    };
+                }
+                return error.NoChild;
+            },
+            .Optional => |opt_info| {
+                return try self.project(opt_info.child);
+            },
+            .Enum => |enum_info| {
+                if (self.getChild(0)) |child| {
+                    return switch (child.value) {
+                        .Int => |int| {
+                            return try std.meta.intToEnum(T, int);
+                        },
+                        .String, .StringRef => {
+                            if (std.meta.stringToEnum(T, child.getString().?)) |e| {
+                                return e;
+                            } else {
+                                return error.CouldNotConvertStringToEnum;
+                            }
+                        },
+                        else => return error.ExpectedIntOrStringNode,
+                    };
+                }
+                return error.NoChild;
+            },
+            .Struct => |struct_info| {
+                var r: T = T{};
+                inline for (struct_info.fields) |field| {
+                    if (self.findString(field.name, 0)) |child| {
+                        @field(r, field.name) = try child.project(field.field_type);
+                    }
+                }
+                return r;
+            },
+            // Only handle [N]?T, where T is any other valid type.
+            .Array => |array_info| {
+                var r = std.mem.zeroes(T);
+                var i: usize = 0;
+                while (i < r.len) : (i += 1) {
+                    if (i >= self.getChildCount()) {
+                        break;
+                    }
+                    r[i] = try self.getChild(i).?.project(array_info.child);
+                }
+                return r;
+            },
+            // Only handle []const u8 and ZNode pointers.
+            .Pointer => |ptr_info| {
+                switch (ptr_info.size) {
+                    .One => {
+                        if (ptr_info.child != ZNode) return error.ExpectedZNodePointer;
+                        return self;
+                    },
+                    .Slice => {
+                        switch (self.value) {
+                            .String, .StringRef => {
+                                if (ptr_info.child != u8) return error.ExpectedStringSlice;
+                                return self.getString().?;
+                            },
+                            else => return error.ExpectedStringNode,
+                        }
+                    },
+                    else => @compileError("Unable to project into type '" ++ @typeName(T) ++ "'"),
+                }
+            },
+            else => @compileError("Unable to project into type '" ++ @typeName(T) ++ "'"),
+        }
+    }
 };
+
+const ExampleEnum = enum {
+    Foo,
+};
+
+const EmbeddedStruct = struct {
+    name: []const u8 = "default",
+    params: ?*const ZNode = null,
+};
+
+const ExampleStruct = struct {
+    max_particles: ?i32 = null,
+    texture: []const u8 = "default",
+    systems: [20]?EmbeddedStruct = [_]?EmbeddedStruct{null} ** 20,
+    en: ?ExampleEnum = null,
+};
+
+test "node projection" {
+    const testing = std.testing;
+
+
+    const text =
+        \\max_particles: 100
+        \\texture: circle
+        \\en: Foo
+        \\systems:
+        \\  : name:Emitter
+        \\    params:
+        \\      some,stuff,hehe
+        \\  : name:Fire
+        \\    params: more stuff: and children
+    ;
+    var node = try parse(testing.allocator, &ParseOptions{}, text);
+    defer node.deinit();
+    // TODO
+    const example = try node.project(ExampleStruct);
+    std.debug.print("{}\n", .{example});
+    for (example.systems) |ex, i| {
+        std.debug.print("{} ({}): \n", .{i, ex != null});
+        if (ex) |e| {
+            if (e.params) |p| {
+                p.show();
+            }
+        }
+    }
+}
 
 test "node initialization and setting" {
     const testing = std.testing;
@@ -958,12 +1103,12 @@ test "node initialization and setting" {
     testing.expectEqualSlices(u8, "Hello, world", root.getString() orelse unreachable);
     try root.setStringRef("Hello, world");
     testing.expectEqualSlices(u8, "Hello, world", root.getString() orelse unreachable);
-    root.setInteger(42);
-    testing.expectEqual(@as(i32, 42), root.getInteger() orelse unreachable);
+    root.setInt(42);
+    testing.expectEqual(@as(i32, 42), root.getInt() orelse unreachable);
     root.setFloat(0.001);
     testing.expect(std.math.approxEq(f32, 0.001, root.getFloat() orelse unreachable, std.math.f32_epsilon));
-    root.setBoolean(true);
-    testing.expectEqual(true, root.getBoolean() orelse unreachable);
+    root.setBool(true);
+    testing.expectEqual(true, root.getBool() orelse unreachable);
 
 }
 
@@ -976,9 +1121,9 @@ test "node appending and searching" {
     var nullChild = try root.appendNull();
     var stringChild = try root.appendString("Hello");
     var fooChild = try root.appendString("foo");
-    var integerChild = try root.appendInteger(42);
+    var integerChild = try root.appendInt(42);
     var floatChild = try root.appendFloat(3.14);
-    var boolChild = try root.appendBoolean(true);
+    var boolChild = try root.appendBool(true);
 
     testing.expectEqual(@as(usize, 6), root.getChildCount());
     testing.expect(root.findNull(0) != null);
@@ -991,11 +1136,11 @@ test "node appending and searching" {
     testing.expect(root.findAnyString(1) != null);
     testing.expect(root.findAnyString(2) == null);
 
-    testing.expect(root.findInteger(42, 0) != null);
-    testing.expect(root.findInteger(41, 0) == null);
-    testing.expect(root.findInteger(42, 1) == null);
-    testing.expect(root.findAnyInteger(0) != null);
-    testing.expect(root.findAnyInteger(1) == null);
+    testing.expect(root.findInt(42, 0) != null);
+    testing.expect(root.findInt(41, 0) == null);
+    testing.expect(root.findInt(42, 1) == null);
+    testing.expect(root.findAnyInt(0) != null);
+    testing.expect(root.findAnyInt(1) == null);
 
     testing.expect(root.findFloat(3.14, 0) != null);
     testing.expect(root.findFloat(3.13, 0) == null);
@@ -1003,10 +1148,10 @@ test "node appending and searching" {
     testing.expect(root.findAnyFloat(0) != null);
     testing.expect(root.findAnyFloat(1) == null);
 
-    testing.expect(root.findAnyBoolean(0) != null);
-    testing.expect(root.findBoolean(true, 0) != null);
-    testing.expect(root.findAnyBoolean(1) == null);
-    testing.expect(root.findBoolean(true, 1) == null);
+    testing.expect(root.findAnyBool(0) != null);
+    testing.expect(root.findBool(true, 0) != null);
+    testing.expect(root.findAnyBool(1) == null);
+    testing.expect(root.findBool(true, 1) == null);
 
     root.clearChildren();
     testing.expect(root.isLeaf());
@@ -1033,9 +1178,9 @@ fn defaultTransformer(new_node: *ZNode, depth: usize) !void {
     const integer = std.fmt.parseInt(i32, slice, 10) catch |_| {
         const float = std.fmt.parseFloat(f32, slice) catch |_| {
             if (std.mem.eql(u8, "true", slice)) {
-                new_node.setBoolean(true);
+                new_node.setBool(true);
             } else if (std.mem.eql(u8, "false", slice)) {
-                new_node.setBoolean(false);
+                new_node.setBool(false);
             } else {
                 // Do nothing.
             }
@@ -1044,7 +1189,7 @@ fn defaultTransformer(new_node: *ZNode, depth: usize) !void {
         new_node.setFloat(float);
         return;
     };
-    new_node.setInteger(integer);
+    new_node.setInt(integer);
 }
 
 fn parseText(stream: *StreamingParser, idx: *usize, text: []const u8) !?ZNodeToken {
@@ -1146,14 +1291,14 @@ pub fn stringifyValue(value: ZValue, out_stream: anytype) @TypeOf(out_stream).Er
             }
             return if (value == .String) try out_stream.writeAll(value.String) else out_stream.writeAll(value.StringRef);
         },
-        .Integer => {
-            return std.fmt.formatIntValue(value.Integer, "", std.fmt.FormatOptions{}, out_stream);
+        .Int => {
+            return std.fmt.formatIntValue(value.Int, "", std.fmt.FormatOptions{}, out_stream);
         },
         .Float => {
             return std.fmt.formatFloatScientific(value.Float, std.fmt.FormatOptions{}, out_stream);
         },
-        .Boolean => {
-            return out_stream.writeAll(if (value.Boolean) "true" else "false");
+        .Bool => {
+            return out_stream.writeAll(if (value.Bool) "true" else "false");
         }
     }
 }
@@ -1203,9 +1348,9 @@ test "parsing into nodes" {
         \\    mana:30
     ;
     const node = try parse(testing.allocator, &ParseOptions{.use_default_transformer = false}, text);
-    node.show();
-    var out = std.io.getStdOut().writer();
-    try stringify(node, out);
+    //node.show();
+    //var out = std.io.getStdOut().writer();
+    //try stringify(node, out);
 
     defer node.deinit();
 }
