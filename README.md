@@ -2,7 +2,7 @@
 
 Simple and boring human readable data format for Zig.
 
-zzz syntax describes a tree of strings. It has little syntactic noise and is really easy to implement. The spec does not force any specific rules for escaping or number parsing. The current implementation uses Zig's standard library for number conversions.
+zzz syntax describes a tree of strings. It has little syntactic noise and is really easy to implement. The spec does not force any specific rules for escaping or number parsing. The current implementation optionally uses Zig's standard library for number transformations. By default nodes are slices that point into the provided text. This is nice in languages that have native support for slices, like Zig and Rust.
 
 zzz's focus is to be a simple and lightweight format to describe trees of data. This library has two kinds of trees: a static (no allocations) tree which can grow up to a limit; and a dynamic tree.
 
