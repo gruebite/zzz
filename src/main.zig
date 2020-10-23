@@ -5,7 +5,7 @@
 //! SPARSE SPEC
 //! (zzz text is escaped using Zig's multiline string: \\)
 //!
-//! A zzz file describes a tree. Special characters (and spaces) are used to go up and down
+//! zzz text describes a tree of strings. Special characters (and spaces) are used to go up and down
 //! the tree. The tree has an implicit null root node.
 //!
 //! Descending the tree:
@@ -1215,13 +1215,13 @@ pub fn parse(allocator: *std.mem.Allocator, text: []const u8) !ZNode {
 
 /// Outputs a `ZNode` and its children on a single line. This can be parsed back.
 pub fn stringifyNode(node: ZNode, out_stream: anytype) @TypeOf(out_stream).Error!void {
-    try stringifyValue(node.value, out_stream);
+    try node.value.stringify(out_stream);
     if (node.children.items.len == 0) {
         return;
     }
     try out_stream.writeAll(":");
     for (node.children.items) |child, i| {
-        try stringifyNode(child, out_stream);
+        try stringifyNode(node, out_stream);
         if (i != node.children.items.len - 1 and child.children.items.len == 0) {
             try out_stream.writeAll(",");
         }
@@ -1232,7 +1232,7 @@ pub fn stringifyNode(node: ZNode, out_stream: anytype) @TypeOf(out_stream).Error
 /// Stringifies the root `ZNode`s children. Each on their own line.
 pub fn stringify(node: ZNode, out_stream: anytype) @TypeOf(out_stream).Error!void {
     for (node.children.items) |child, i| {
-        try stringifyNode(child, out_stream);
+        try stringifyNode(node, out_stream);
         try out_stream.writeAll("\n");
     }
 }

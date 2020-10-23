@@ -2,9 +2,19 @@
 
 Simple and boring human readable data format for Zig.
 
-zzz syntax describes a tree with as little noise as possible. It can be thought of as an extension to CSV. zzz is also really easy to implement and does not force any specific rules for string parsing or number parsing. The currently implemented conversions use Zig's standard library.
+zzz syntax describes a tree of strings. It has little syntactic noise and is really easy to implement. The spec does not force any specific rules for escaping or number parsing. The current implementation uses Zig's standard library for number conversions.
+
+zzz's focus is to be used as a simple and lightweight format to describe trees of data. This library has two kinds of trees: a static (no allocations) tree which can grow up to a limit; and a dynamic tree.
+
+## Use-cases
+
+- Configuration files
+- Game object descriptions
+- Embedded devices
 
 ## Quick example
+
+D&D Kobold stat block.
 
 ```
 # Comments begin with a hash symbol.
@@ -16,13 +26,13 @@ name: Kobold
 tags: small, humanoid, lawful evil
 armor class: 12
 
-# : can appear on the same line, here (2d6 - 2) is a child of 5
+# : can appear on the same line, here "(2d6 - 2)" is a child of "5"
 hit points: 5 : (2d6 - 2)
 
-# You can use this for meta attributes, if necessary.
+# This can be used for meta tagging
 speed: 30 : ft
 
-# Continuing on a newline. Indentation is exact to describe a parent/child relationship
+# Continuing on a newline. The indentation is exactly 2 spaces to describe a parent/child relationship
 stats
   str:7:-2
   dex:15:2
@@ -31,7 +41,7 @@ stats
   wis:7:-2
   cha:8:-1
 
-# ; can be used to go up in the tree. Here we ascend up from the "ft" meta node
+# ; is used to go up in the tree. Here we ascend up from the "ft" meta node
 senses: darkvision:60:ft;; passive perception:8
 languages: common, draconic
 challenge: 1:8
@@ -47,9 +57,17 @@ creature if at least one of the kobold's allies is within
 5 feet of the creature and the ally isn't incapacitated.]]
 ```
 
+# Building & examples
+
+Checkout the source code comments and test, or the example directory for usage.
+
+`zig build`
+
+`zig build examples`
+
 # Sparse spec
 
-A zzz file describes a tree of strings. Special characters (and spaces) are used to go up and down the tree. The tree has an implicit null root node.
+zzz text describes a tree of strings. Special characters (and spaces) are used to go up and down the tree. The tree has an implicit null root node.
 
 ### Descending the tree:
 ```
