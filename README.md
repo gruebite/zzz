@@ -98,6 +98,10 @@ For more examples see the source comments and tests.
 
 `zig build examples`
 
+## Other languages
+
+- **Rust**: https://github.com/MouseProducedGames/ruzzzt
+
 # Sparse spec
 
 zzz text describes a tree of strings. Special characters (and spaces) are used to go up and down the tree. The tree has an implicit null root node.
