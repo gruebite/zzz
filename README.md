@@ -37,12 +37,12 @@ speed: 30 : ft
 
 # Continuing on a newline. The indentation is exactly 2 spaces to describe a parent/child relationship
 stats:
-  str:7:-2
-  dex:15:2
-  con:9:-1
-  int:8:-1
-  wis:7:-2
-  cha:8:-1
+  str: 7: -2
+  dex: 15: 2
+  con: 9: -1
+  int: 8: -1
+  wis: 7: -2
+  cha: 8: -1
 
 # ; is used to go up in the tree. Here we ascend up from the "ft" meta node
 senses: darkvision:60:ft;; passive perception:8

@@ -6,12 +6,12 @@ armor class: 12
 hit points: 5 : (2d6 - 2)
 speed: 30 : ft
 stats
-  str:7:-2
-  dex:15:2
-  con:9:-1
-  int:8:-1
-  wis:7:-2
-  cha:8:-1
+  str: 7: -2
+  dex: 15: 2
+  con: 9: -1
+  int: 8: -1
+  wis: 7: -2
+  cha: 8: -1
 senses: darkvision:60:ft;; passive perception:8
 languages: common, draconic
 challenge: 1:8
