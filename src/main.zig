@@ -1301,63 +1301,40 @@ pub fn imprint(self: anytype, checks: ImprintChecks, onto_ptr: anytype) anyerror
     std.debug.assert(@typeInfo(@TypeOf(self)) == .Pointer);
     const T = @typeInfo(@TypeOf(onto_ptr)).Pointer.child;
     switch (@typeInfo(T)) {
-        .Void => {
-            if (self.getChild(0)) |child| {
-                // Set.
-            } else if (checks.child_exists) {
-                return error.ChildDoesNotExist;
-            }
-        },
+        .Void => { },
         .Bool => {
-            if (self.getChild(0)) |child| {
-                onto_ptr.* = switch (child.value) {
-                    .Bool => |b| b,
-                    else => if (checks.correct_type) return error.ExpectedBool else return,
-                };
-            } else if (checks.child_exists) {
-                return error.ChildDoesNotExist;
-            }
+            onto_ptr.* = switch (self.value) {
+                .Bool => |b| b,
+                else => if (checks.correct_type) return error.ExpectedBool else return,
+            };
         },
         .Float, .ComptimeFloat => {
-            if (self.getChild(0)) |child| {
-                onto_ptr.* = switch (child.value) {
-                    .Float => |n| @floatCast(f32, n),
-                    else => if (checks.correct_type) return error.ExpectedFloat else return,
-                };
-            } else if (checks.child_exists) {
-                return error.ChildDoesNotExist;
-            }
+            onto_ptr.* = switch (self.value) {
+                .Float => |n| @floatCast(f32, n),
+                else => if (checks.correct_type) return error.ExpectedFloat else return,
+            };
         },
         .Int, .ComptimeInt => {
-            if (self.getChild(0)) |child| {
-                onto_ptr.* = switch (child.value) {
-                    .Int => |n| @intCast(i32, n),
-                    else => if (checks.correct_type) return error.ExpectedInt else return,
-                };
-            } else if (checks.child_exists) {
-                return error.ChildDoesNotExist;
-            }
+            onto_ptr.* = switch (self.value) {
+                .Int => |n| @intCast(i32, n),
+                else => if (checks.correct_type) return error.ExpectedInt else return,
+            };
         },
         .Enum => {
             std.debug.print("ENUM {}\n", .{self});
-            if (self.getChild(0)) |child| {
-                switch (child.value) {
-                    .Int => |int| {
-                        onto_ptr.* = try std.meta.intToEnum(T, int);
-                    },
-                    .String => {
-                        std.debug.print("ENUM {}\n", .{child});
-                        if (std.meta.stringToEnum(T, child.value.String)) |e| {
-                            onto_ptr.* = e;
-                        } else {
-                            return if (checks.enum_converted) error.CouldNotConvertStringToEnum;
-                        }
-                    },
-                    else => if (checks.correct_type) return error.ExpectedIntOrString,
-                }
-                return;
-            } else if (checks.child_exists) {
-                return error.ChildDoesNotExist;
+            switch (self.value) {
+                .Int => |int| {
+                    onto_ptr.* = try std.meta.intToEnum(T, int);
+                },
+                .String => {
+                    std.debug.print("ENUM {}\n", .{self});
+                    if (std.meta.stringToEnum(T, self.value.String)) |e| {
+                        onto_ptr.* = e;
+                    } else {
+                        return if (checks.enum_converted) error.CouldNotConvertStringToEnum;
+                    }
+                },
+                else => if (checks.correct_type) return error.ExpectedIntOrString,
             }
         },
         .Optional => |opt_info| {
@@ -1375,8 +1352,12 @@ pub fn imprint(self: anytype, checks: ImprintChecks, onto_ptr: anytype) anyerror
         .Struct => |struct_info| {
             var r: T = T{};
             inline for (struct_info.fields) |field, i| {
-                if (self.findNth(0, .{.String = field.name})) |child| {
-                    try imprint(child, checks, &@field(r, field.name));
+                if (self.findNth(0, .{.String = field.name})) |child_field| {
+                    if (child_field.?.getChild(0)) |child| {
+                        try imprint(child, checks, &@field(r, field.name));
+                    } else {
+                        return error.ChildDoesNotExist;
+                    }
                 } else if (checks.field_exists) {
                     return error.FieldDoesNotExist;
                 }
@@ -1415,11 +1396,7 @@ pub fn imprint(self: anytype, checks: ImprintChecks, onto_ptr: anytype) anyerror
                                     return error.NonStringSlice;
                                 }
                             } else {
-                                if (self.getChild(0)) |child| {
-                                    onto_ptr.* = child.value.String;
-                                } else if (checks.child_exists) {
-                                    return error.ChildDoesNotExist;
-                                }
+                                onto_ptr.* = self.value.String;
                             }
                         },
                         else => if (checks.correct_type) return error.ExpectedStringNode,
