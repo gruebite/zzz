@@ -8,11 +8,16 @@ const json_example = @embedFile("../example-data/json-example-3.zzz");
 pub fn main() !void {
     // The kobold has exactly 51 nodes.
     var tree = zzz.ZStaticTree(1, 51){};
+    // Append the text to the tree. This creates a new root.
     const node = try tree.appendText(kobold);
+    std.debug.print("Roots: {}\n", .{tree.rootSlice().len});
+    // Apply the default transformer which converts any nodes to floats, integers, or bools.
     try node.transform(void, {}, zzz.defaultTransformer);
+    // Debug print.
     tree.show();
 
     std.debug.print("Number of nodes: {}\n", .{tree.node_count});
+    // This function searches all the node's descendants.
     std.debug.print("Kobold's CON: {}\n", .{node.findNthDescendant(0, .{.String = "con"}).?.child.?.value.Int});
 
     // The JSON example has exactly 161 nodes.
@@ -20,6 +25,17 @@ pub fn main() !void {
     const root = try big_tree.appendText(json_example);
     try root.transform(void, {}, zzz.defaultTransformer);
     big_tree.show();
+
+    // Find all servlet names.
+    var depth: usize = 0;
+    var iter = root;
+    while (iter.next(&depth)) |n| : (iter = n) {
+        if (n.value.equals(.{.String = "servlet-name"})) {
+            if (n.child) |child| {
+                std.debug.print("servlet-name: {}\n", .{child.value});
+            }
+        }
+    }
 
     std.debug.print("Number of nodes: {}\n", .{big_tree.node_count});
 }

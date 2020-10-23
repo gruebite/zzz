@@ -679,6 +679,17 @@ pub const ZStaticNode = struct {
         }
     }
 
+    /// Returns the next node in the tree until reaching root or the stopper node.
+    pub fn nextUntil(self: *const Self, stopper: *const ZStaticNode, depth: *usize) ?*ZStaticNode {
+        const node = self.next(depth);
+        if (node) |n| {
+            if (n != stopper) {
+                return n;
+            }
+        }
+        return null;
+    }
+
     /// Returns the nth child.
     pub fn getChild(self: *const Self, nth: usize) ?*const ZStaticNode {
         var count: usize = 0;
