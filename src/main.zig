@@ -1321,13 +1321,11 @@ pub fn imprint(self: anytype, checks: ImprintChecks, onto_ptr: anytype) anyerror
             };
         },
         .Enum => {
-            std.debug.print("ENUM {}\n", .{self});
             switch (self.value) {
                 .Int => |int| {
                     onto_ptr.* = try std.meta.intToEnum(T, int);
                 },
                 .String => {
-                    std.debug.print("ENUM {}\n", .{self});
                     if (std.meta.stringToEnum(T, self.value.String)) |e| {
                         onto_ptr.* = e;
                     } else {
@@ -1341,7 +1339,6 @@ pub fn imprint(self: anytype, checks: ImprintChecks, onto_ptr: anytype) anyerror
             var t: opt_info.child = undefined;
             var err = false;
             imprint(self, checks, &t) catch |e| {
-                std.debug.print("ERR {}\n", .{e});
                 if (e != error.ChildDoesNotExist) {
                     return e;
                 }
@@ -1353,10 +1350,16 @@ pub fn imprint(self: anytype, checks: ImprintChecks, onto_ptr: anytype) anyerror
             var r: T = T{};
             inline for (struct_info.fields) |field, i| {
                 if (self.findNth(0, .{.String = field.name})) |child_field| {
-                    if (child_field.?.getChild(0)) |child| {
-                        try imprint(child, checks, &@field(r, field.name));
+                    // Special case for pointers, we just take the whole node.
+                    const info = @typeInfo(field.field_type);
+                    if (info == .Pointer and info.Pointer.size == .One) {
+                        try imprint(child_field, checks, &@field(r, field.name));
                     } else {
-                        return error.ChildDoesNotExist;
+                        if (child_field.getChild(0)) |child| {
+                            try imprint(child, checks, &@field(r, field.name));
+                        } else {
+                            //return error.ChildDoesNotExist;
+                        }
                     }
                 } else if (checks.field_exists) {
                     return error.FieldDoesNotExist;
@@ -1366,15 +1369,18 @@ pub fn imprint(self: anytype, checks: ImprintChecks, onto_ptr: anytype) anyerror
         },
         // Only handle [N]?T, where T is any other valid type.
         .Array => |array_info| {
-            var r = std.mem.zeroes(T);
-            var i: usize = 0;
-            while (i < r.len) : (i += 1) {
-                if (i >= self.getChildCount()) {
-                    break;
+            // Arrays are weird. They work on siblings, not children.
+            if (self.parent) |parent| {
+                var r = std.mem.zeroes(T);
+                var i: usize = 0;
+                while (i < r.len) : (i += 1) {
+                    if (i >= parent.getChildCount()) {
+                        break;
+                    }
+                    try imprint(parent.getChild(i).?, checks, &r[i]);
                 }
-                try imprint(self.getChild(i).?, checks, &r[i]);
+                onto_ptr.* = r;
             }
-            onto_ptr.* = r;
         },
         // Only handle []const u8 and ZNode pointers.
         .Pointer => |ptr_info| {
