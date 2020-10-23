@@ -31,12 +31,12 @@ pub const Monster = struct {
     health: i32 = 0,
     attacks: [MAX_ATTACKS]?Attack = [_]?Attack{null} ** MAX_ATTACKS,
     // Structs can be partially filled to defer more complex or dynamic structures.
-    complex: ?zzz.ZAnyNode = null,
+    complex: ?*const zzz.ZNode = null,
 };
 
 pub fn main() !void {
     // The dragon has exactly 35 nodes.
-    var tree = zzz.ZStaticTree(1, 35){};
+    var tree = zzz.ZTree(1, 35){};
     // Append the text to the tree. This creates a new root.
     var node = try tree.appendText(dragon);
     // Apply the default transformer which converts any nodes to floats, integers, or bools.
@@ -58,5 +58,5 @@ pub fn main() !void {
         std.debug.print("    Range: {}\n", .{att.range});
         std.debug.print("    Description: {}\n\n", .{att.description});
     }
-    monster.complex.?.ZStaticNode.show();
+    monster.complex.?.show();
 }

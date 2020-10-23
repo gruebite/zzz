@@ -7,7 +7,7 @@ const json_example = @embedFile("../example-data/json-example-3.zzz");
 
 pub fn main() !void {
     // The kobold has exactly 51 nodes.
-    var tree = zzz.ZStaticTree(1, 51){};
+    var tree = zzz.ZTree(1, 51){};
     // Append the text to the tree. This creates a new root.
     const node = try tree.appendText(kobold);
     std.debug.print("Roots: {}\n", .{tree.rootSlice().len});
@@ -21,7 +21,7 @@ pub fn main() !void {
     std.debug.print("Kobold's CON: {}\n", .{node.findNthDescendant(0, .{.String = "con"}).?.child.?.value.Int});
 
     // The JSON example has exactly 161 nodes.
-    var big_tree = zzz.ZStaticTree(1, 161){};
+    var big_tree = zzz.ZTree(1, 161){};
     const root = try big_tree.appendText(json_example);
     try root.transform(void, {}, zzz.defaultTransformer);
     big_tree.show();

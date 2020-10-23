@@ -4,7 +4,19 @@ Simple and boring human readable data format for Zig.
 
 zzz syntax describes a tree of strings. It has little syntactic noise and is really easy to implement. The spec does not force any specific rules for escaping or number parsing. The current implementation optionally uses Zig's standard library for number transformations. By default nodes are slices that point into the provided text. This is nice in languages that have native support for slices, like Zig and Rust.
 
-zzz's focus is to be a simple and lightweight format to describe trees of data. This library has two kinds of trees: a static (no allocations) tree which can grow up to a limit; and a dynamic tree.
+zzz's focus is to be a simple and lightweight format to describe trees of data. This library implements a static tree which incurs no allocations. Reading a teee is as easy as:
+
+```js
+// 1 is the max number of roots, 100 is the max number of nodes.
+var tree = zzz.ZTree(1, 100){};
+var root = try.appendText("foo:bar");
+// Root is always null.
+assert(root.value == .Null);
+assert(root.findNth(0, .{.String = "foo"}) != null);
+assert(root.findNthDescendant(0, .{.String = "bar"}) != null);
+// Output to a single line.
+root.stringify(std.io.getStdOut().writer());
+```
 
 ## Use-cases
 

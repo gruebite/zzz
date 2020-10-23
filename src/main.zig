@@ -642,30 +642,24 @@ pub fn defaultTransformer(context: void, value: ZValue, depth: isize) anyerror!Z
     return ZValue{.Int = integer};
 }
 
-/// ZStaticTree errors.
-pub const ZStaticError = error {
+/// ZTree errors.
+pub const ZError = error {
     TreeFull,
     TooManyRoots,
 };
 
-/// Can represent either a static node or dynamic one.
-pub const ZAnyNode = union(enum) {
-    ZStaticNode: *const ZStaticNode,
-    ZNode: *const ZNode,
-};
-
 /// Represents a node in a static tree. Nodes have a parent, child, and sibling pointer
 /// to a spot in the array.
-pub const ZStaticNode = struct {
+pub const ZNode = struct {
     const Self = @This();
     value: ZValue = .Null,
-    parent: ?*ZStaticNode = null,
-    sibling: ?*ZStaticNode = null,
-    child: ?*ZStaticNode = null,
+    parent: ?*ZNode = null,
+    sibling: ?*ZNode = null,
+    child: ?*ZNode = null,
 
     /// Returns the next Node in the tree. Will return Null after reaching root. For nodes further
     /// down the tree, they will bubble up, resulting in a negative depth.
-    pub fn next(self: *const Self, depth: *isize) ?*ZStaticNode {
+    pub fn next(self: *const Self, depth: *isize) ?*ZNode {
         if (self.child) |c| {
             depth.* += 1;
             return c;
@@ -673,7 +667,7 @@ pub const ZStaticNode = struct {
             return c;
         } else {
             // Go up and forward.
-            var iter: ?*const ZStaticNode = self;
+            var iter: ?*const ZNode = self;
             while (iter != null) {
                 iter = iter.?.parent;
                 if (iter != null) {
@@ -688,7 +682,7 @@ pub const ZStaticNode = struct {
     }
 
     /// Returns the next node in the tree until reaching root or the stopper node.
-    pub fn nextUntil(self: *const Self, stopper: *const ZStaticNode, depth: *isize) ?*ZStaticNode {
+    pub fn nextUntil(self: *const Self, stopper: *const ZNode, depth: *isize) ?*ZNode {
         const node = self.next(depth);
         if (node) |n| {
             if (n != stopper) {
@@ -699,9 +693,9 @@ pub const ZStaticNode = struct {
     }
 
     /// Returns the nth child.
-    pub fn getChild(self: *const Self, nth: usize) ?*const ZStaticNode {
+    pub fn getChild(self: *const Self, nth: usize) ?*const ZNode {
         var count: usize = 0;
-        var iter: ?*ZStaticNode = self.child orelse return null;
+        var iter: ?*const ZNode = self.child;
         while (iter) |n| {
             if (count == nth) {
                 return n;
@@ -714,7 +708,7 @@ pub const ZStaticNode = struct {
 
     pub fn getChildCount(self: *const Self) usize {
         var count: usize = 0;
-        var iter: ?*ZStaticNode = self.child orelse return 0;
+        var iter: ?*const ZNode = self.child;
         while (iter) |n| {
             count += 1;
             iter = n.sibling;
@@ -723,9 +717,9 @@ pub const ZStaticNode = struct {
     }
 
     /// Finds the nth child node with a specific tag.
-    pub fn findNthAny(self: *const Self, nth: usize, tag: @TagType(ZValue)) ?*const ZStaticNode {
+    pub fn findNthAny(self: *const Self, nth: usize, tag: @TagType(ZValue)) ?*const ZNode {
         var count: usize = 0;
-        var iter: ?*ZStaticNode = self.child orelse return null;
+        var iter: ?*const ZNode = self.child;
         while (iter) |n| {
             if (n.value == tag) {
                 if (count == nth) {
@@ -739,9 +733,9 @@ pub const ZStaticNode = struct {
     }
 
     /// Finds the nth child node with a specific value.
-    pub fn findNth(self: *const Self, nth: usize, value: ZValue) ?*const ZStaticNode {
+    pub fn findNth(self: *const Self, nth: usize, value: ZValue) ?*const ZNode {
         var count: usize = 0;
-        var iter: ?*ZStaticNode = self.child orelse return null;
+        var iter: ?*const ZNode = self.child orelse return null;
         while (iter) |n| {
             if (n.value.equals(value)) {
                 if (count == nth) {
@@ -755,10 +749,10 @@ pub const ZStaticNode = struct {
     }
 
     /// Traverses descendants until a node with the tag is found.
-    pub fn findNthAnyDescendant(self: *const Self, nth: usize, value: @TagType(ZValue)) ?*const ZStaticNode {
+    pub fn findNthAnyDescendant(self: *const Self, nth: usize, value: @TagType(ZValue)) ?*const ZNode {
         var depth: isize = 0;
         var count: usize = 0;
-        var iter: *const ZStaticNode = self;
+        var iter: *const ZNode = self;
         while (iter.nextUntil(self, &depth)) |n| : (iter = n) {
             if (n.value == tag) {
                 if (count == nth) {
@@ -771,10 +765,10 @@ pub const ZStaticNode = struct {
     }
 
     /// Traverses descendants until a node with the specific value is found.
-    pub fn findNthDescendant(self: *const Self, nth: usize, value: ZValue) ?*const ZStaticNode {
+    pub fn findNthDescendant(self: *const Self, nth: usize, value: ZValue) ?*const ZNode {
         var depth: isize = 0;
         var count: usize = 0;
-        var iter: *const ZStaticNode = self;
+        var iter: *const ZNode = self;
         while (iter.nextUntil(self, &depth)) |n| : (iter = n) {
             if (n.value.equals(value)) {
                 if (count == nth) {
@@ -790,25 +784,51 @@ pub const ZStaticNode = struct {
     /// free resources too.
     pub fn transform(self: *Self, comptime C: type, context: C, transformer: fn(C, ZValue, isize) anyerror!ZValue) anyerror!void {
         var depth: isize = 0;
-        var iter: *const ZStaticNode = self;
+        var iter: *const ZNode = self;
         while (iter.nextUntil(self, &depth)) |c| : (iter = c) {
             c.value = try transformer(context, c.value, depth);
         }
     }
 
     /// Iteratively traverses the tree, passing the node.
-    pub fn traverse(self: *Self, comptime C: type, context: C, traverser: fn(C, *ZStaticNode, isize) anyerror!void) anyerror!void {
+    pub fn traverse(self: *Self, comptime C: type, context: C, traverser: fn(C, *ZNode, isize) anyerror!void) anyerror!void {
         var depth: isize = 0;
-        var iter: *const ZStaticNode = self;
+        var iter: *const ZNode = self;
         while (iter.nextUntil(self, &depth)) |c| : (iter = c) {
             try traverser(context, c, depth);
+        }
+    }
+
+    /// Outputs a `ZNode` and its children on a single line. This can be parsed back.
+    pub fn stringify(self: *const Self, out_stream: anytype) @TypeOf(out_stream).Error!void {
+        // Likely not root.
+        if (self.value != .Null) {
+            try self.value.stringify(out_stream);
+            try out_stream.writeAll(":");
+        }
+        var depth: isize = 0;
+        var last_depth: isize = 1;
+        var iter = self;
+        while (iter.nextUntil(self, &depth)) |n| : (iter = n) {
+            if (depth > last_depth) {
+                last_depth = depth;
+                try out_stream.writeAll(":");
+            } else if (depth < last_depth) {
+                while (depth < last_depth) {
+                    try out_stream.writeAll(";");
+                    last_depth -= 1;
+                }
+            } else if (depth > 1) {
+                try out_stream.writeAll(",");
+            }
+            try n.value.stringify(out_stream);
         }
     }
 
     pub fn show(self: *const Self) void {
         std.debug.print("{}\n", .{self.value});
         var depth: isize = 0;
-        var iter: *const ZStaticNode = self;
+        var iter: *const ZNode = self;
         while (iter.nextUntil(self, &depth)) |c| : (iter = c) {
             var i: isize = 0;
             while (i < depth) : (i += 1) {
@@ -820,16 +840,16 @@ pub const ZStaticNode = struct {
 };
 
 /// Represents a static fixed-size zzz tree. Values are slices over the text passed.
-pub fn ZStaticTree(comptime R: usize, comptime S: usize) type {
+pub fn ZTree(comptime R: usize, comptime S: usize) type {
     return struct {
         const Self = @This();
-        roots: [R]*ZStaticNode = undefined,
+        roots: [R]*ZNode = undefined,
         root_count: usize = 0,
-        nodes: [S]ZStaticNode = [_]ZStaticNode{.{}} ** S,
+        nodes: [S]ZNode = [_]ZNode{.{}} ** S,
         node_count: usize = 0,
 
         /// Appends correct zzz text to the tree, creating a new root.
-        pub fn appendText(self: *Self, text: []const u8) !*ZStaticNode {
+        pub fn appendText(self: *Self, text: []const u8) !*ZNode {
             var root = try self.addNode(null, .Null);
             var current = root;
             var current_depth: usize = 0;
@@ -877,20 +897,20 @@ pub fn ZStaticTree(comptime R: usize, comptime S: usize) type {
         }
 
         /// Returns a slice of active roots.
-        pub fn rootSlice(self: *const Self) []const *ZStaticNode {
+        pub fn rootSlice(self: *const Self) []const *ZNode {
             return self.roots[0..self.root_count];
         }
 
         /// Adds a node given a parent. Null parent starts a new root.
-        pub fn addNode(self: *Self, parent: ?*ZStaticNode, value: ZValue) ZStaticError!*ZStaticNode {
+        pub fn addNode(self: *Self, parent: ?*ZNode, value: ZValue) ZError!*ZNode {
             if (self.node_count >= S) {
-                return ZStaticError.TreeFull;
+                return ZError.TreeFull;
             }
             var node = &self.nodes[self.node_count];
             self.node_count += 1;
             if (parent == null) {
                 if (self.root_count >= R) {
-                    return ZStaticError.TooManyRoots;
+                    return ZError.TooManyRoots;
                 }
                 self.roots[self.root_count] = node;
                 self.root_count += 1;
@@ -899,6 +919,16 @@ pub fn ZStaticTree(comptime R: usize, comptime S: usize) type {
             node.parent = parent;
             node.sibling = null;
             node.child = null;
+            // Add to end.
+            if (parent) |p| {
+                if (p.child) |child| {
+                    var iter = child;
+                    while (iter.sibling) |sib| : (iter = sib) { }
+                    iter.sibling = node;
+                } else {
+                    p.child = node;
+                }
+            }
             return node;
         }
 
@@ -923,148 +953,10 @@ test "static tree" {
         \\  : name:Fire
     ;
 
-    var tree = ZStaticTree(1, 100){};
+    var tree = ZTree(1, 100){};
     const node = try tree.appendText(text);
     try node.transform(void, {}, defaultTransformer);
 }
-
-/// A `ZNode` in a dynamic zzz tree. The root `ZNode` will have a value of `.Null`.
-pub const ZNode = struct {
-    const Self = @This();
-    parent: ?*ZNode,
-    /// The `ZNode`s value.
-    value: ZValue,
-    /// The `ZNode`s children. Should really have to access this directly, but through the use
-    /// of convenience functions.
-    children: std.ArrayList(ZNode),
-
-    /// Create a `ZNode`.
-    pub fn init(allocator: *std.mem.Allocator, value: ZValue) Self {
-        return Self{
-            .parent = null,
-            .value = value,
-            .children = std.ArrayList(ZNode).init(allocator),
-        };
-    }
-
-    /// Clears and frees all children under this `ZNode`.
-    pub fn clearChildren(self: *Self) void {
-        for (self.getChildren()) |*child| {
-            child.deinit();
-        }
-        while (self.children.items.len > 0) {
-            _ = self.children.pop();
-        }
-    }
-
-    /// Frees the memory associated with the `ZNode` and its children.
-    pub fn deinit(self: *const Self) void {
-        for (self.children.items) |*child| {
-            child.deinit();
-        }
-        self.children.deinit();
-    }
-
-    /// Appends a value to this `ZNode`s children.
-    pub fn append(self: *Self, value: ZValue) !*ZNode {
-        var node = ZNode.init(self.children.allocator, value);
-        node.parent = self;
-        try self.children.append(node);
-        return &self.children.items[self.children.items.len - 1];
-    }
-
-    /// Returns true if this `ZNode` has no children.
-    pub inline fn isLeaf(self: *const Self) bool {
-        return self.children.items.len == 0;
-    }
-
-    /// Returns the slice of the children. Becomes invalid after any appends or clears.
-    pub inline fn getChildren(self: *const Self) std.ArrayList(ZNode).Slice {
-        return self.children.items;
-    }
-
-    /// Returns the `nth` child or null.
-    pub inline fn getChild(self: *const Self, nth: usize) ?*ZNode {
-        if (nth < self.children.items.len) {
-            return &self.children.items[nth];
-        }
-        return null;
-    }
-
-    /// Returns the number of children this `ZNode` has.
-    pub inline fn getChildCount(self: *const Self) usize {
-        return self.children.items.len;
-    }
-
-    /// Finds the `nth` child with the exact `value`.
-    pub fn findNth(self: *const Self, nth: usize, value: ZValue) ?*ZNode {
-        var i: usize = 0;
-        for (self.getChildren()) |*child| {
-            if (child.*.value.equals(value)) {
-                if (i == nth) {
-                    return child;
-                }
-                i += 1;
-            }
-        }
-        return null;
-    }
-
-    /// Finds the `nth` child with the tag.
-    pub fn findNthAny(self: *const Self, nth: usize, tag: @TagType(ZValue)) ?*ZNode {
-        var i: usize = 0;
-        for (self.getChildren()) |*child| {
-            if (child.*.value == tag) {
-                if (i == nth) {
-                    return child;
-                }
-                i += 1;
-            }
-        }
-        return null;
-    }
-
-    fn show_(self: *const Self, index: usize) void {
-        var i: usize = 0;
-        while (i < index) : (i += 1) {
-            std.debug.print("  ", .{});
-        }
-        std.debug.print("{}:\n", .{self.value});
-        for (self.children.items) |item| {
-            item.show_(index + 1);
-        }
-    }
-
-    /// Debug prints the values using `std.debug.print`.
-    pub fn show(self: *const Self) void {
-        self.show_(0);
-    }
-
-    fn transform_(self: *Self, comptime C: type, context: C, transformer: fn(C, ZValue, isize) anyerror!ZValue, depth: isize) anyerror!void {
-        self.value = try transformer(context, self.value, depth);
-        for (self.getChildren()) |*child| {
-            try child.transform_(C, context, transformer, depth + 1);
-        }
-    }
-
-    /// Recursively transforms node values. Can pass a context, like an allocator. This can be used
-    /// free resources too.
-    pub fn transform(self: *Self, comptime C: type, context: C, transformer: fn(C, ZValue, isize) anyerror!ZValue) anyerror!void {
-        return self.transform_(C, context, transformer, 0);
-    }
-
-    fn traverse_(self: *Self, comptime C: type, context: C, traverser: fn(C, *ZNode, isize) anyerror!void, depth: isize) anyerror!void {
-        self.value = try traverser(context, self, depth);
-        for (self.getChildren()) |*child| {
-            child.traverse_(C, context, traverser, depth + 1);
-        }
-    }
-
-    /// Recursively traverses the tree, passing the node.
-    pub fn traverse(self: *Self, comptime C: type, context: C, traverser: fn(C, *ZNode, isize) anyerror!void) anyerror!void {
-        return self.traverse_(C, context, traverser, 0);
-    }
-};
 
 test "node conforming imprint" {
     const testing = std.testing;
@@ -1098,12 +990,12 @@ test "node conforming imprint" {
         \\    params
         \\exists: anything here
     ;
-    var node = try parse(testing.allocator, text);
-    defer node.deinit();
+    var tree = ZTree(1, 100){};
+    var node = try tree.appendText(text);
     try node.transform(void, {}, defaultTransformer);
 
     var example = ConformingStruct{};
-    try imprint(&node, ImprintChecks{
+    try imprint(node, ImprintChecks{
         .field_exists = true, .child_exists = true,
         .correct_type = true,
     }, &example);
@@ -1134,26 +1026,28 @@ test "node nonconforming imprint" {
         \\      some,stuff,hehe
         \\  : name:Fire
     ;
-    var node = try parse(testing.allocator, text);
-    defer node.deinit();
+    var tree = ZTree(1, 100){};
+    var node = try tree.appendText(text);
+    try node.transform(void, {}, defaultTransformer);
 
     var example = NonConformingStruct{};
-    try imprint(&node, ImprintChecks{.correct_type = false}, &example);
-    testing.expectError(error.FieldDoesNotExist, imprint(&node, ImprintChecks{.field_exists = true, .correct_type = false}, &example));
+    try imprint(node, ImprintChecks{.correct_type = false}, &example);
+    testing.expectError(error.FieldDoesNotExist, imprint(node, ImprintChecks{.field_exists = true, .correct_type = false}, &example));
 }
 
 test "node appending and searching" {
     const testing = std.testing;
 
-    var root = ZNode.init(testing.allocator, .Null);
-    defer root.deinit();
 
-    var nullChild = try root.append(.Null);
-    var stringChild = try root.append(.{.String = "Hello"});
-    var fooChild = try root.append(.{.String = "foo"});
-    var integerChild = try root.append(.{.Int = 42});
-    var floatChild = try root.append(.{.Float = 3.14});
-    var boolChild = try root.append(.{.Bool = true});
+    var tree = ZTree(1, 100){};
+    var root = try tree.addNode(null, .Null);
+
+    var nullChild = try tree.addNode(root, .Null);
+    var stringChild = try tree.addNode(root, .{.String = "Hello"});
+    var fooChild = try tree.addNode(root, .{.String = "foo"});
+    var integerChild = try tree.addNode(root, .{.Int = 42});
+    var floatChild = try tree.addNode(root, .{.Float = 3.14});
+    var boolChild = try tree.addNode(root, .{.Bool = true});
 
     testing.expectEqual(@as(usize, 6), root.getChildCount());
     testing.expect(root.findNth(0, .Null) != null);
@@ -1182,72 +1076,6 @@ test "node appending and searching" {
     testing.expect(root.findNth(0, .{.Bool = true}) != null);
     testing.expect(root.findNthAny(1, .Bool) == null);
     testing.expect(root.findNth(1, .{.Bool = true}) == null);
-
-    root.clearChildren();
-    testing.expect(root.isLeaf());
-}
-
-/// Parses a text block and returns the root `ZNode`. All `ZNode`s will reference the text and
-/// will not make any string allocations.
-pub fn parse(allocator: *std.mem.Allocator, text: []const u8) !ZNode {
-    const MAX_DEPTH = 256;
-    var stack: [MAX_DEPTH]*ZNode = undefined;
-    var node = ZNode.init(allocator, .Null);
-    stack[0] = &node;
-    var stack_depth: usize = 1;
-    errdefer stack[0].deinit();
-
-    var stream = StreamingParser.init();
-    var idx: usize = 0;
-    while (try parseStream(&stream, &idx, text)) |token| {
-        const slice = text[token.start..token.end];
-        if (token.depth <= stack_depth) {
-            stack_depth = token.depth;
-        } else if (token.depth == stack_depth + 1) {
-            // Descend.
-            const len = stack[stack_depth].children.items.len;
-            stack[stack_depth + 1] = &stack[stack_depth].children.items[len - 1];
-            stack_depth += 1;
-        } else {
-            // Levels shouldn't increase by more than one.
-            unreachable;
-        }
-        if (slice.len == 0) {
-            _ = try stack[stack_depth].append(.Null);
-            continue;
-        }
-        _ = try stack[stack_depth].append(.{.String = slice});
-    }
-
-    if (!stream.hasCompleted()) {
-        return error.UnfinishedString;
-    }
-
-    return node;
-}
-
-/// Outputs a `ZNode` and its children on a single line. This can be parsed back.
-pub fn stringifyNode(node: ZNode, out_stream: anytype) @TypeOf(out_stream).Error!void {
-    try node.value.stringify(out_stream);
-    if (node.children.items.len == 0) {
-        return;
-    }
-    try out_stream.writeAll(":");
-    for (node.children.items) |child, i| {
-        try stringifyNode(node, out_stream);
-        if (i != node.children.items.len - 1 and child.children.items.len == 0) {
-            try out_stream.writeAll(",");
-        }
-    }
-    try out_stream.writeAll(";");
-}
-
-/// Stringifies the root `ZNode`s children. Each on their own line.
-pub fn stringify(node: ZNode, out_stream: anytype) @TypeOf(out_stream).Error!void {
-    for (node.children.items) |child, i| {
-        try stringifyNode(node, out_stream);
-        try out_stream.writeAll("\n");
-    }
 }
 
 test "parsing into nodes" {
@@ -1270,12 +1098,6 @@ test "parsing into nodes" {
         \\  : health:10
         \\    mana:30
     ;
-    const node = try parse(testing.allocator, text);
-    //node.show();
-    //var out = std.io.getStdOut().writer();
-    //try stringify(node, out);
-
-    defer node.deinit();
 }
 
 /// Checks that can be enabled when calling `imprint` onto a struct.
@@ -1300,7 +1122,7 @@ pub const ImprintChecks = packed struct {
 /// - `.CheckField`
 ///
 /// TODO: Removing anyerror causes infinite loop.
-pub fn imprint(self: anytype, checks: ImprintChecks, onto_ptr: anytype) anyerror!void {
+pub fn imprint(self: *const ZNode, checks: ImprintChecks, onto_ptr: anytype) anyerror!void {
     std.debug.assert(@typeInfo(@TypeOf(onto_ptr)) == .Pointer);
     std.debug.assert(@typeInfo(@TypeOf(self)) == .Pointer);
     const T = @typeInfo(@TypeOf(onto_ptr)).Pointer.child;
@@ -1350,18 +1172,6 @@ pub fn imprint(self: anytype, checks: ImprintChecks, onto_ptr: anytype) anyerror
             };
             if (!err) { onto_ptr.* = t; }
         },
-        .Union => |union_info| {
-            if (T == ZAnyNode) {
-                if (@typeInfo(@TypeOf(self)).Pointer.child == ZNode) {
-                    onto_ptr.* = ZAnyNode{.ZNode = self};
-                }
-                if (@typeInfo(@TypeOf(self)).Pointer.child == ZStaticNode) {
-                    onto_ptr.* = ZAnyNode{.ZStaticNode = self};
-                }
-            } else {
-                return error.InvalidType;
-            }
-        },
         .Struct => |struct_info| {
             std.debug.print("{}\n", .{struct_info});
             var r: T = T{};
@@ -1403,7 +1213,7 @@ pub fn imprint(self: anytype, checks: ImprintChecks, onto_ptr: anytype) anyerror
         .Pointer => |ptr_info| {
             switch (ptr_info.size) {
                 .One => {
-                    if (ptr_info.child != ZNode or ptr_info.child != ZStaticNode) {
+                    if (ptr_info.child == ZNode) {
                         onto_ptr.* = self;
                         return;
                     }
