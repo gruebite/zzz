@@ -9,7 +9,7 @@ zzz's focus is to be a simple and lightweight format to describe trees of data. 
 ```js
 // 1 is the max number of roots, 100 is the max number of nodes.
 var tree = zzz.ZTree(1, 100){};
-var root = try.appendText("foo:bar");
+var root = try tree.appendText("foo:bar");
 // Root is always null.
 assert(root.value == .Null);
 assert(root.findNth(0, .{.String = "foo"}) != null);
