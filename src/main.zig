@@ -544,8 +544,8 @@ pub const ZStaticError = error {
     TooManyRoots,
 };
 
-/// The tree is represented by a static array. Nodes will have a parent, child, and sibling
-/// pointer to a spot in the array.
+/// Represents a node in a static tree. Nodes have a parent, child, and sibling pointer
+/// to a spot in the array.
 pub const ZStaticNode = struct {
     const Self = @This();
     value: ZValue = .Null,
@@ -576,7 +576,7 @@ pub const ZStaticNode = struct {
         }
     }
 
-    /// Finds
+    /// Finds the nth child node with a specific tag.
     pub fn findNthAny(self: *const Self, nth: usize, tag: @TagType(ZValue)) ?*const ZStaticNode {
         var count: usize = 0;
         var iter: ?*ZStaticNode = self.child orelse return null;
@@ -592,6 +592,7 @@ pub const ZStaticNode = struct {
         return null;
     }
 
+    /// Finds the nth child node with a specific value.
     pub fn findNth(self: *const Self, nth: usize, value: ZValue) ?*const ZStaticNode {
         var count: usize = 0;
         var iter: ?*ZStaticNode = self.child orelse return null;
@@ -607,12 +608,15 @@ pub const ZStaticNode = struct {
         return null;
     }
 
-    /// Recursively traverses the tree, searching for a descendant
+    /// Traverses descendants until a node with the tag is found.
     pub fn findNthAnyDescendant(self: *const Self, nth: usize, value: @TagType(ZValue)) ?*const ZStaticNode {
         var depth: usize = 0;
         var count: usize = 0;
         var iter: *const ZStaticNode = self;
         while (iter.next(&depth)) |n| : (iter = n) {
+            if (n == self) {
+                break;
+            }
             if (n.value == tag) {
                 if (count == nth) {
                     return n;
@@ -623,12 +627,15 @@ pub const ZStaticNode = struct {
         return null;
     }
 
-    /// Recursively traverses the tree, searching for a descendant
+    /// Traverses descendants until a node with the specific value is found.
     pub fn findNthDescendant(self: *const Self, nth: usize, value: ZValue) ?*const ZStaticNode {
         var depth: usize = 0;
         var count: usize = 0;
         var iter: *const ZStaticNode = self;
         while (iter.next(&depth)) |n| : (iter = n) {
+            if (n == self) {
+                break;
+            }
             if (n.value.equals(value)) {
                 if (count == nth) {
                     return n;
@@ -639,7 +646,7 @@ pub const ZStaticNode = struct {
         return null;
     }
 
-    /// Recursively transforms node values. Can pass a context, like an allocator. This can be used
+    /// Iteratively transforms node values. Can pass a context, like an allocator. This can be used
     /// free resources too.
     pub fn transform(self: *Self, comptime C: type, context: C, transformer: fn(C, ZValue, usize) anyerror!ZValue) anyerror!void {
         var depth: usize = 0;
@@ -649,7 +656,7 @@ pub const ZStaticNode = struct {
         }
     }
 
-    /// Recursively traverses the tree, passing the node.
+    /// Iteratively traverses the tree, passing the node.
     pub fn traverse(self: *Self, comptime C: type, context: C, traverser: fn(C, *ZStaticNode, usize) anyerror!void) anyerror!void {
         var depth: usize = 0;
         var iter: *const ZStaticNode = self;
@@ -672,7 +679,7 @@ pub const ZStaticNode = struct {
     }
 };
 
-/// Represents a static zzz tree. Values will be slices over text.
+/// Represents a static fixed-size zzz tree. Values are slices over the text passed.
 pub fn ZStaticTree(comptime R: usize, comptime S: usize) type {
     return struct {
         const Self = @This();
