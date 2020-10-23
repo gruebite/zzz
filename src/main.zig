@@ -530,6 +530,96 @@ pub fn parseStream(stream: *StreamingParser, idx: *usize, text: []const u8) !?ZN
     return null;
 }
 
+/// A `ZNode`'s value.
+pub const ZValue = union(enum) {
+    const Self = @This();
+    Null,
+    String: []const u8,
+    Int: i32,
+    Float: f32,
+    Bool: bool,
+
+    /// Checks a ZValues equality.
+    pub fn equals(self: Self, other: Self) bool {
+        if (self == .Null and other == .Null) {
+            return true;
+        }
+        if (self == .String and other == .String) {
+            return std.mem.eql(u8, self.String, other.String);
+        }
+        if (self == .Int and other == .Int) {
+            return self.Int == other.Int;
+        }
+        if (self == .Float and other == .Float) {
+            return std.math.approxEq(f32, self.Float, other.Float, std.math.f32_epsilon);
+        }
+        if (self == .Bool and other == .Bool) {
+            return self.Bool == other.Bool;
+        }
+        return false;
+    }
+
+    /// Outputs a value to the `out_stream`. This output is a parsable.
+    pub fn stringify(self: Self, out_stream: anytype) @TypeOf(out_stream).Error!void {
+        switch (self) {
+            .Null => {
+                // Skip.
+            },
+            .String => {
+                const find = std.mem.indexOfScalar;
+                const chars = "\"\n\t\r,:;";
+                const chars_count = @sizeOf(@TypeOf(chars));
+                var need_escape = false;
+                var found = [_]bool{false} ** chars_count;
+                for ("\"\n\t\r,:;") |ch, i| {
+                    const f = find(u8, self.String, ch);
+                    if (f != null) {
+                        found[i] = true;
+                        need_escape = true;
+                    }
+                }
+                if (need_escape) {
+                    // 0=" 1=\n
+                    if (found[0] or found[1]) {
+                        // Escape with Lua.
+                        try out_stream.writeAll("[[");
+                        const ret = try out_stream.writeAll(self.String);
+                        try out_stream.writeAll("]]");
+                        return ret;
+                    } else {
+                        // Escape with basic quotes.
+                        try out_stream.writeAll("\"");
+                        const ret = try out_stream.writeAll(self.String);
+                        try out_stream.writeAll("\"");
+                        return ret;
+                    }
+                }
+                return try out_stream.writeAll(self.String);
+            },
+            .Int => {
+                return std.fmt.formatIntValue(self.Int, "", std.fmt.FormatOptions{}, out_stream);
+            },
+            .Float => {
+                return std.fmt.formatFloatScientific(self.Float, std.fmt.FormatOptions{}, out_stream);
+            },
+            .Bool => {
+                return out_stream.writeAll(if (self.Bool) "true" else "false");
+            }
+        }
+    }
+
+    ///
+    pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        switch (self) {
+            .Null => try std.fmt.format(writer, ".Null", .{}),
+            .String => try std.fmt.format(writer, ".String({})", .{self.String}),
+            .Int => try std.fmt.format(writer, ".Int({})", .{self.Int}),
+            .Float => try std.fmt.format(writer, ".Float({})", .{self.Float}),
+            .Bool => try std.fmt.format(writer, ".Bool({})", .{self.Bool}),
+        }
+    }
+};
+
 /// Transformer function. Level is tree depth, so top depth nodes have a depth of 1.
 pub fn defaultTransformer(context: void, value: ZValue, depth: usize) anyerror!ZValue {
     if (value != .String) {
@@ -587,6 +677,30 @@ pub const ZStaticNode = struct {
             }
             return null;
         }
+    }
+
+    /// Returns the nth child.
+    pub fn getChild(self: *const Self, nth: usize) ?*const ZStaticNode {
+        var count: usize = 0;
+        var iter: ?*ZStaticNode = self.child orelse return null;
+        while (iter) |n| {
+            if (count == nth) {
+                return n;
+            }
+            count += 1;
+            iter = n.sibling;
+        }
+        return null;
+    }
+
+    pub fn getChildCount(self: *const Self) usize {
+        var count: usize = 0;
+        var iter: ?*ZStaticNode = self.child orelse return 0;
+        while (iter) |n| {
+            count += 1;
+            iter = n.sibling;
+        }
+        return count;
     }
 
     /// Finds the nth child node with a specific tag.
@@ -801,47 +915,7 @@ test "static tree" {
     tree.show();
 }
 
-/// A `ZNode`'s value. The `.String` is dynamic memory managed by the node. These should not be
-/// created directly but through a `ZNode`.
-pub const ZValue = union(enum) {
-    const Self = @This();
-    Null,
-    String: []const u8,
-    Int: i32,
-    Float: f32,
-    Bool: bool,
-
-    pub fn equals(self: Self, other: Self) bool {
-        if (self == .Null and other == .Null) {
-            return true;
-        }
-        if (self == .String and other == .String) {
-            return std.mem.eql(u8, self.String, other.String);
-        }
-        if (self == .Int and other == .Int) {
-            return self.Int == other.Int;
-        }
-        if (self == .Float and other == .Float) {
-            return std.math.approxEq(f32, self.Float, other.Float, std.math.f32_epsilon);
-        }
-        if (self == .Bool and other == .Bool) {
-            return self.Bool == other.Bool;
-        }
-        return false;
-    }
-
-    pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-        switch (self) {
-            .Null => try std.fmt.format(writer, ".Null", .{}),
-            .String => try std.fmt.format(writer, ".String({})", .{self.String}),
-            .Int => try std.fmt.format(writer, ".Int({})", .{self.Int}),
-            .Float => try std.fmt.format(writer, ".Float({})", .{self.Float}),
-            .Bool => try std.fmt.format(writer, ".Bool({})", .{self.Bool}),
-        }
-    }
-};
-
-/// A `ZNode` in a zzz tree. The root `ZNode` will have a value of `.Null`.
+/// A `ZNode` in a dynamic zzz tree. The root `ZNode` will have a value of `.Null`.
 pub const ZNode = struct {
     const Self = @This();
     parent: ?*ZNode,
@@ -977,162 +1051,6 @@ pub const ZNode = struct {
     pub fn traverse(self: *Self, comptime C: type, context: C, traverser: fn(C, *ZNode, usize) anyerror!void) anyerror!void {
         return self.traverse_(C, context, traverser, 0);
     }
-
-    /// Checks to enable or disable when calling `imprint`.
-    pub const ImbueChecks = packed struct {
-        /// Return an error when a struct field is missing from the node tree.
-        field_exists: bool = false,
-        /// Returns an error when a field's node exists, but the value doesn't.
-        child_exists: bool = false,
-        /// Returns an error when a node's value is of the wrong type.
-        correct_type: bool = true,
-        /// Returns an error when a node couldn't be converted to an enum.
-        enum_converted: bool = true,
-        /// Returns an error when passed invalid types (even on the struct).
-        invalid_types: bool = true,
-    };
-
-    /// Projects this node into a type. The only types allowed are zzz types, structs, fixed arrays,
-    /// optionals, and enums. This function performs no allocations and u8 slices refer to strings
-    /// by reference. Enums can be mapped from string or int. There are a few optional checks:
-    ///
-    /// - `.NoCheck` perform no checks, if something can fit it'll fit.
-    /// - `.CheckField`
-    ///
-    /// TODO: Removing anyerror causes infinite loop.
-    pub fn imprint(self: *const Self, checks: ImbueChecks, onto_ptr: anytype) anyerror!void {
-        std.debug.assert(@typeInfo(@TypeOf(onto_ptr)) == .Pointer);
-        const T = @typeInfo(@TypeOf(onto_ptr)).Pointer.child;
-        switch (@typeInfo(T)) {
-            .Void => {
-                if (self.getChild(0)) |child| {
-                    // Set.
-                } else if (checks.child_exists) {
-                    return error.ChildDoesNotExist;
-                }
-            },
-            .Bool => {
-                if (self.getChild(0)) |child| {
-                    onto_ptr.* = switch (child.value) {
-                        .Bool => |b| b,
-                        else => if (checks.correct_type) return error.ExpectedBool else return,
-                    };
-                } else if (checks.child_exists) {
-                    return error.ChildDoesNotExist;
-                }
-            },
-            .Float, .ComptimeFloat => {
-                if (self.getChild(0)) |child| {
-                    onto_ptr.* = switch (child.value) {
-                        .Float => |n| @floatCast(f32, n),
-                        else => if (checks.correct_type) return error.ExpectedFloat else return,
-                    };
-                } else if (checks.child_exists) {
-                    return error.ChildDoesNotExist;
-                }
-            },
-            .Int, .ComptimeInt => {
-                if (self.getChild(0)) |child| {
-                    onto_ptr.* = switch (child.value) {
-                        .Int => |n| @intCast(i32, n),
-                        else => if (checks.correct_type) return error.ExpectedInt else return,
-                    };
-                } else if (checks.child_exists) {
-                    return error.ChildDoesNotExist;
-                }
-            },
-            .Enum => {
-                if (self.getChild(0)) |child| {
-                    switch (child.value) {
-                        .Int => |int| {
-                            onto_ptr.* = try std.meta.intToEnum(T, int);
-                        },
-                        .String => {
-                            if (std.meta.stringToEnum(T, child.value.String)) |e| {
-                                onto_ptr.* = e;
-                            } else {
-                                return if (checks.enum_converted) error.CouldNotConvertStringToEnum;
-                            }
-                        },
-                        else => if (checks.correct_type) return error.ExpectedIntOrString,
-                    }
-                    return;
-                } else if (checks.child_exists) {
-                    return error.ChildDoesNotExist;
-                }
-            },
-            .Optional => |opt_info| {
-                var t: opt_info.child = undefined;
-                var err = false;
-                self.imprint(checks, &t) catch |e| {
-                    std.debug.print("ERR {}\n", .{e});
-                    if (e != error.ChildDoesNotExist) {
-                        return e;
-                    }
-                    err = true;
-                };
-                if (!err) { onto_ptr.* = t; }
-            },
-            .Struct => |struct_info| {
-                var r: T = T{};
-                inline for (struct_info.fields) |field, i| {
-                    if (self.findNth(0, .{.String = field.name})) |child| {
-                        try child.imprint(checks, &@field(r, field.name));
-                    } else if (checks.field_exists) {
-                        return error.FieldDoesNotExist;
-                    }
-                }
-                onto_ptr.* = r;
-            },
-            // Only handle [N]?T, where T is any other valid type.
-            .Array => |array_info| {
-                var r = std.mem.zeroes(T);
-                var i: usize = 0;
-                while (i < r.len) : (i += 1) {
-                    if (i >= self.getChildCount()) {
-                        break;
-                    }
-                    try self.getChild(i).?.imprint(checks, &r[i]);
-                }
-                onto_ptr.* = r;
-            },
-            // Only handle []const u8 and ZNode pointers.
-            .Pointer => |ptr_info| {
-                switch (ptr_info.size) {
-                    .One => {
-                        if (ptr_info.child != ZNode) {
-                            if (checks.invalid_types) {
-                                return error.ExpectedZNodePointer;
-                            }
-                        } else {
-                            onto_ptr.* = self;
-                        }
-                    },
-                    .Slice => {
-                        switch (self.value) {
-                            .String, => {
-                                if (ptr_info.child != u8) {
-                                    if (checks.invalid_types) {
-                                        return error.NonStringSlice;
-                                    }
-                                } else {
-                                    if (self.getChild(0)) |child| {
-                                        onto_ptr.* = child.value.String;
-                                    } else if (checks.child_exists) {
-                                        return error.ChildDoesNotExist;
-                                    }
-                                }
-                            },
-                            else => if (checks.correct_type) return error.ExpectedStringNode,
-                        }
-                        return;
-                    },
-                    else => if (checks.invalid_types) return error.InvalidType,
-                }
-            },
-            else => if (checks.invalid_types) return error.InvalidType,
-        }
-    }
 };
 
 test "node conforming imprint" {
@@ -1172,7 +1090,7 @@ test "node conforming imprint" {
     try node.transform(void, {}, defaultTransformer);
 
     var example = ConformingStruct{};
-    try node.imprint(ZNode.ImbueChecks{
+    try imprint(&node, ImprintChecks{
         .field_exists = true, .child_exists = true,
         .correct_type = true,
     }, &example);
@@ -1207,8 +1125,8 @@ test "node nonconforming imprint" {
     defer node.deinit();
 
     var example = NonConformingStruct{};
-    try node.imprint(ZNode.ImbueChecks{.correct_type = false}, &example);
-    testing.expectError(error.FieldDoesNotExist, node.imprint(ZNode.ImbueChecks{.field_exists = true, .correct_type = false}, &example));
+    try imprint(&node, ImprintChecks{.correct_type = false}, &example);
+    testing.expectError(error.FieldDoesNotExist, imprint(&node, ImprintChecks{.field_exists = true, .correct_type = false}, &example));
 }
 
 test "node appending and searching" {
@@ -1256,7 +1174,7 @@ test "node appending and searching" {
     testing.expect(root.isLeaf());
 }
 
-/// Parses a text block and returns the root `ZNode`. All `ZNode`s will just reference the text and
+/// Parses a text block and returns the root `ZNode`. All `ZNode`s will reference the text and
 /// will not make any string allocations.
 pub fn parse(allocator: *std.mem.Allocator, text: []const u8) !ZNode {
     const MAX_DEPTH = 256;
@@ -1293,55 +1211,6 @@ pub fn parse(allocator: *std.mem.Allocator, text: []const u8) !ZNode {
     }
 
     return node;
-}
-
-/// Outputs a value to the `out_stream`. This output is a parsable.
-pub fn stringifyValue(value: ZValue, out_stream: anytype) @TypeOf(out_stream).Error!void {
-    switch (value) {
-        .Null => {
-            // Skip.
-        },
-        .String => {
-            const find = std.mem.indexOfScalar;
-            const chars = "\"\n\t\r,:;";
-            const chars_count = @sizeOf(@TypeOf(chars));
-            var need_escape = false;
-            var found = [_]bool{false} ** chars_count;
-            for ("\"\n\t\r,:;") |ch, i| {
-                const f = find(u8, value.String, ch);
-                if (f != null) {
-                    found[i] = true;
-                    need_escape = true;
-                }
-            }
-            if (need_escape) {
-                // 0=" 1=\n
-                if (found[0] or found[1]) {
-                    // Escape with Lua.
-                    try out_stream.writeAll("[[");
-                    const ret = try out_stream.writeAll(value.String);
-                    try out_stream.writeAll("]]");
-                    return ret;
-                } else {
-                    // Escape with basic quotes.
-                    try out_stream.writeAll("\"");
-                    const ret = try out_stream.writeAll(value.String);
-                    try out_stream.writeAll("\"");
-                    return ret;
-                }
-            }
-            return try out_stream.writeAll(value.String);
-        },
-        .Int => {
-            return std.fmt.formatIntValue(value.Int, "", std.fmt.FormatOptions{}, out_stream);
-        },
-        .Float => {
-            return std.fmt.formatFloatScientific(value.Float, std.fmt.FormatOptions{}, out_stream);
-        },
-        .Bool => {
-            return out_stream.writeAll(if (value.Bool) "true" else "false");
-        }
-    }
 }
 
 /// Outputs a `ZNode` and its children on a single line. This can be parsed back.
@@ -1394,4 +1263,161 @@ test "parsing into nodes" {
     //try stringify(node, out);
 
     defer node.deinit();
+}
+
+/// Checks that can be enabled when calling `imprint` onto a struct.
+pub const ImprintChecks = packed struct {
+    /// Return an error when a struct field is missing from the node tree.
+    field_exists: bool = false,
+    /// Returns an error when a field's node exists, but the value doesn't.
+    child_exists: bool = false,
+    /// Returns an error when a node's value is of the wrong type.
+    correct_type: bool = true,
+    /// Returns an error when a node couldn't be converted to an enum.
+    enum_converted: bool = true,
+    /// Returns an error when passed invalid types (even on the struct).
+    invalid_types: bool = true,
+};
+
+/// Imprints a node into a type. The only types allowed are zzz types, structs, fixed arrays,
+/// optionals, and enums. This function performs no allocations and u8 slices refer to strings
+/// by reference. Enums can be mapped from string or int. There are a few optional checks:
+///
+/// - `.NoCheck` perform no checks, if something can fit it'll fit.
+/// - `.CheckField`
+///
+/// TODO: Removing anyerror causes infinite loop.
+pub fn imprint(self: anytype, checks: ImprintChecks, onto_ptr: anytype) anyerror!void {
+    std.debug.assert(@typeInfo(@TypeOf(onto_ptr)) == .Pointer);
+    std.debug.assert(@typeInfo(@TypeOf(self)) == .Pointer);
+    const T = @typeInfo(@TypeOf(onto_ptr)).Pointer.child;
+    switch (@typeInfo(T)) {
+        .Void => {
+            if (self.getChild(0)) |child| {
+                // Set.
+            } else if (checks.child_exists) {
+                return error.ChildDoesNotExist;
+            }
+        },
+        .Bool => {
+            if (self.getChild(0)) |child| {
+                onto_ptr.* = switch (child.value) {
+                    .Bool => |b| b,
+                    else => if (checks.correct_type) return error.ExpectedBool else return,
+                };
+            } else if (checks.child_exists) {
+                return error.ChildDoesNotExist;
+            }
+        },
+        .Float, .ComptimeFloat => {
+            if (self.getChild(0)) |child| {
+                onto_ptr.* = switch (child.value) {
+                    .Float => |n| @floatCast(f32, n),
+                    else => if (checks.correct_type) return error.ExpectedFloat else return,
+                };
+            } else if (checks.child_exists) {
+                return error.ChildDoesNotExist;
+            }
+        },
+        .Int, .ComptimeInt => {
+            if (self.getChild(0)) |child| {
+                onto_ptr.* = switch (child.value) {
+                    .Int => |n| @intCast(i32, n),
+                    else => if (checks.correct_type) return error.ExpectedInt else return,
+                };
+            } else if (checks.child_exists) {
+                return error.ChildDoesNotExist;
+            }
+        },
+        .Enum => {
+            if (self.getChild(0)) |child| {
+                switch (child.value) {
+                    .Int => |int| {
+                        onto_ptr.* = try std.meta.intToEnum(T, int);
+                    },
+                    .String => {
+                        if (std.meta.stringToEnum(T, child.value.String)) |e| {
+                            onto_ptr.* = e;
+                        } else {
+                            return if (checks.enum_converted) error.CouldNotConvertStringToEnum;
+                        }
+                    },
+                    else => if (checks.correct_type) return error.ExpectedIntOrString,
+                }
+                return;
+            } else if (checks.child_exists) {
+                return error.ChildDoesNotExist;
+            }
+        },
+        .Optional => |opt_info| {
+            var t: opt_info.child = undefined;
+            var err = false;
+            imprint(self, checks, &t) catch |e| {
+                std.debug.print("ERR {}\n", .{e});
+                if (e != error.ChildDoesNotExist) {
+                    return e;
+                }
+                err = true;
+            };
+            if (!err) { onto_ptr.* = t; }
+        },
+        .Struct => |struct_info| {
+            var r: T = T{};
+            inline for (struct_info.fields) |field, i| {
+                if (self.findNth(0, .{.String = field.name})) |child| {
+                    try imprint(child, checks, &@field(r, field.name));
+                } else if (checks.field_exists) {
+                    return error.FieldDoesNotExist;
+                }
+            }
+            onto_ptr.* = r;
+        },
+        // Only handle [N]?T, where T is any other valid type.
+        .Array => |array_info| {
+            var r = std.mem.zeroes(T);
+            var i: usize = 0;
+            while (i < r.len) : (i += 1) {
+                if (i >= self.getChildCount()) {
+                    break;
+                }
+                try imprint(self.getChild(i).?, checks, &r[i]);
+            }
+            onto_ptr.* = r;
+        },
+        // Only handle []const u8 and ZNode pointers.
+        .Pointer => |ptr_info| {
+            switch (ptr_info.size) {
+                .One => {
+                    if (ptr_info.child != ZNode) {
+                        if (checks.invalid_types) {
+                            return error.ExpectedZNodePointer;
+                        }
+                    } else {
+                        onto_ptr.* = self;
+                    }
+                },
+                .Slice => {
+                    switch (self.value) {
+                        .String, => {
+                            if (ptr_info.child != u8) {
+                                if (checks.invalid_types) {
+                                    return error.NonStringSlice;
+                                }
+                            } else {
+                                if (self.getChild(0)) |child| {
+                                    onto_ptr.* = child.value.String;
+                                } else if (checks.child_exists) {
+                                    return error.ChildDoesNotExist;
+                                }
+                            }
+                        },
+                        else => if (checks.correct_type) return error.ExpectedStringNode,
+                    }
+                    return;
+                },
+                else => if (checks.invalid_types) return error.InvalidType,
+            }
+        },
+        else => if (checks.invalid_types) return error.InvalidType,
+    }
 }
