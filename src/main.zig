@@ -871,6 +871,7 @@ pub fn ZStaticTree(comptime R: usize, comptime S: usize) type {
         /// Clears the entire tree.
         pub fn clear(self: *Self) void {
             self.root_count = 0;
+            self.node_count = 0;
         }
 
         /// Returns a slice of active roots.
