@@ -226,7 +226,7 @@ Output:
 null -> "\n\t\r"
 ```
 
-### Comments begin with # and run up to the end of the line. Their intendation follows the same rules as nodes.
+### Comments begin with # and run up to the end of the line. Their indentation follows the same rules as nodes.
 ```
 # A comment
 a node

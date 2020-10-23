@@ -35,8 +35,7 @@
 //!
 //! Exactly two spaces are used to to go down a level in the tree:
 //! \\parent:child
-//! \\  sibling
-//! Output:
+//! \\  siblingtend
 //! null -> "parent" -> "child"
 //!                  -> "sibling"
 //!
@@ -80,10 +79,10 @@
 //! Output:
 //! null -> "\n\t\r"
 //!
-//! Comments begin with # and run up to the end of the line. Their intendation follows the same
+//! Comments begin with # and run up to the end of the line. Their indentation follows the same
 //! rules as nodes.
 //! \\# A comment
-//! \\a node
+//! \\a nodetend
 //! \\  # Another comment
 //! \\  a sibling
 //! Output:
