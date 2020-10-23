@@ -94,7 +94,7 @@ menu:
 
 For more examples see the source comments and tests.
 
-`zig build`
+`zig build test`
 
 `zig build examples`
 

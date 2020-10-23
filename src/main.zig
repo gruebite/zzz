@@ -921,7 +921,6 @@ test "static tree" {
     var tree = ZStaticTree(1, 100){};
     const node = try tree.appendText(text);
     try node.transform(void, {}, defaultTransformer);
-    tree.show();
 }
 
 /// A `ZNode` in a dynamic zzz tree. The root `ZNode` will have a value of `.Null`.
