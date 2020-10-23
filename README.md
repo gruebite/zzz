@@ -17,7 +17,9 @@ zzz's focus is to be a simple and lightweight format to describe trees of data. 
 
 D&D Kobold stat block. Raw text [here](https://raw.githubusercontent.com/gruebite/zzz/main/example-data/kobold.zzz).
 
-```
+(YAML highlighting used)
+
+```yaml
 # Comments begin with a hash symbol.
 
 # : describes a parent child relationship
@@ -34,7 +36,7 @@ hit points: 5 : (2d6 - 2)
 speed: 30 : ft
 
 # Continuing on a newline. The indentation is exactly 2 spaces to describe a parent/child relationship
-stats
+stats:
   str:7:-2
   dex:15:2
   con:9:-1
@@ -48,11 +50,11 @@ languages: common, draconic
 challenge: 1:8
 
 # Multline strings follow the same rules as Lua's. The first newline on an empty line is skipped
-abilities
-  sunlight sensitivity:[[
+abilities:
+  sunlight sensitivity: [[
 While in sunlight, the kobold has disadvantage on attack
 rolls, as well as on Wisdom (Perception) checks that rely on sight.]]
-  pack tactics:[[
+  pack tactics: [[
 The kobold has advantage on an attack roll against a
 creature if at least one of the kobold's allies is within
 5 feet of the creature and the ally isn't incapacitated.]]
