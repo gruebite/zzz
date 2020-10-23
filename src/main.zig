@@ -1123,8 +1123,12 @@ pub const ImprintChecks = packed struct {
 ///
 /// TODO: Removing anyerror causes infinite loop.
 pub fn imprint(self: *const ZNode, checks: ImprintChecks, onto_ptr: anytype) anyerror!void {
-    std.debug.assert(@typeInfo(@TypeOf(onto_ptr)) == .Pointer);
-    std.debug.assert(@typeInfo(@TypeOf(self)) == .Pointer);
+    if (@typeInfo(@TypeOf(onto_ptr)) != .Pointer) {
+        @compileError("Passed struct must be a pointer.");
+    }
+    if (@typeInfo(@TypeOf(self)) != .Pointer) {
+        @compileError("Passed node must be a pointer.");
+    }
     const T = @typeInfo(@TypeOf(onto_ptr)).Pointer.child;
     switch (@typeInfo(T)) {
         .Void => { },
@@ -1173,7 +1177,6 @@ pub fn imprint(self: *const ZNode, checks: ImprintChecks, onto_ptr: anytype) any
             if (!err) { onto_ptr.* = t; }
         },
         .Struct => |struct_info| {
-            std.debug.print("{}\n", .{struct_info});
             var r: T = T{};
             inline for (struct_info.fields) |field, i| {
                 if (self.findNth(0, .{.String = field.name})) |child_field| {
