@@ -11,10 +11,11 @@ zzz's focus is to be used as a simple and lightweight format to describe trees o
 - Configuration files
 - Game object descriptions
 - Embedded devices
+- Simple serialization format
 
 ## Quick example
 
-D&D Kobold stat block.
+D&D Kobold stat block. Raw text [here](https://raw.githubusercontent.com/gruebite/zzz/main/example-data/kobold.zzz).
 
 ```
 # Comments begin with a hash symbol.
@@ -57,9 +58,39 @@ creature if at least one of the kobold's allies is within
 5 feet of the creature and the ally isn't incapacitated.]]
 ```
 
+## JSON example
+
+Translated from http://www.json.org/example.html
+```yaml
+menu:
+  id: file
+  value: File
+  popup:
+    menuitem:
+      : value: New
+        onclick: CreateNewDoc()
+      : value: Open
+        onclick: OpenDoc()
+      : value: Close
+        oneclick: CloseDoc()
+```
+```json
+{"menu": {
+  "id": "file",
+  "value": "File",
+  "popup": {
+    "menuitem": [
+      {"value": "New", "onclick": "CreateNewDoc()"},
+      {"value": "Open", "onclick": "OpenDoc()"},
+      {"value": "Close", "onclick": "CloseDoc()"}
+    ]
+  }
+}}
+```
+
 # Building & examples
 
-Checkout the source code comments and test, or the example directory for usage.
+For more examples see the source comments and tests.
 
 `zig build`
 
