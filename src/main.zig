@@ -947,69 +947,104 @@ pub const ZNode = struct {
         self.show_(0);
     }
 
-    /// Projects this node into a type. If the type is a struct it must have default fields and
-    /// the types must match zzz types (can be optional): i32, f32, bool, array, []const u8.
-    /// This performs no allocations and u8 slices refer only to strings and by reference. Enums
-    /// can be mapped from string or int.
-    pub fn project(self: *const Self, comptime T: type) !T {
-        //std.debug.print("PROJECT {}\n", .{@typeInfo(T)});
+    /// Checks to enable or disable when calling `imprint`.
+    pub const ImbueChecks = packed struct {
+        /// Return an error when a struct field is missing from the node tree.
+        field_exists: bool = false,
+        /// Returns an error when a field's node exists, but the value doesn't.
+        child_exists: bool = false,
+        /// Returns an error when a node's value is of the wrong type.
+        correct_type: bool = true,
+        /// Returns an error when a node couldn't be converted to an enum.
+        enum_converted: bool = true,
+        /// Returns an error when passed invalid types (even on the struct).
+        invalid_types: bool = true,
+    };
+
+    /// Projects this node into a type. The only types allowed are zzz types, structs, fixed arrays,
+    /// optionals, and enums. This function performs no allocations and u8 slices refer to strings
+    /// by reference. Enums can be mapped from string or int. There are a few optional checks:
+    ///
+    /// - `.NoCheck` perform no checks, if something can fit it'll fit.
+    /// - `.CheckField`
+    ///
+    /// TODO: Removing anyerror causes infinite loop.
+    pub fn imprint(self: *const Self, checks: ImbueChecks, onto_ptr: anytype) anyerror!void {
+        std.debug.assert(@typeInfo(@TypeOf(onto_ptr)) == .Pointer);
+        const T = @typeInfo(@TypeOf(onto_ptr)).Pointer.child;
         switch (@typeInfo(T)) {
             .Bool => {
                 if (self.getChild(0)) |child| {
-                    return switch (child.value) {
+                    onto_ptr.* = switch (child.value) {
                         .Bool => |b| b,
-                        else => error.ExpectedBoolNode,
+                        else => if (checks.correct_type) return error.ExpectedBool else return,
                     };
+                } else if (checks.child_exists) {
+                    return error.ChildDoesNotExist;
                 }
-                return error.NoChild;
             },
             .Float, .ComptimeFloat => {
                 if (self.getChild(0)) |child| {
-                    return switch (child.value) {
+                    onto_ptr.* = switch (child.value) {
                         .Float => |n| @floatCast(f32, n),
-                        else => return error.ExpectedFloatNode,
+                        else => if (checks.correct_type) return error.ExpectedFloat else return,
                     };
+                } else if (checks.child_exists) {
+                    return error.ChildDoesNotExist;
                 }
-                return error.NoChild;
             },
             .Int, .ComptimeInt => {
                 if (self.getChild(0)) |child| {
-                    return switch (child.value) {
+                    onto_ptr.* = switch (child.value) {
                         .Int => |n| @intCast(i32, n),
-                        else => return error.ExpectedIntNode,
+                        else => if (checks.correct_type) return error.ExpectedInt else return,
                     };
+                } else if (checks.child_exists) {
+                    return error.ChildDoesNotExist;
                 }
-                return error.NoChild;
             },
-            .Optional => |opt_info| {
-                return try self.project(opt_info.child);
-            },
-            .Enum => |enum_info| {
+            .Enum => {
                 if (self.getChild(0)) |child| {
-                    return switch (child.value) {
+                    switch (child.value) {
                         .Int => |int| {
-                            return try std.meta.intToEnum(T, int);
+                            onto_ptr.* = try std.meta.intToEnum(T, int);
                         },
                         .String, .StringRef => {
                             if (std.meta.stringToEnum(T, child.getString().?)) |e| {
-                                return e;
+                                onto_ptr.* = e;
                             } else {
-                                return error.CouldNotConvertStringToEnum;
+                                return if (checks.enum_converted) error.CouldNotConvertStringToEnum;
                             }
                         },
-                        else => return error.ExpectedIntOrStringNode,
-                    };
+                        else => if (checks.correct_type) return error.ExpectedIntOrString,
+                    }
+                    return;
+                } else if (checks.child_exists) {
+                    return error.ChildDoesNotExist;
                 }
-                return error.NoChild;
+            },
+            .Optional => |opt_info| {
+                var t: opt_info.child = undefined;
+                var err = false;
+                self.imprint(checks, &t) catch |e| {
+                    std.debug.print("ERR {}\n", .{e});
+                    if (e != error.ChildDoesNotExist) {
+                        return e;
+                    }
+                    err = true;
+                };
+                if (!err) { onto_ptr.* = t; }
             },
             .Struct => |struct_info| {
                 var r: T = T{};
-                inline for (struct_info.fields) |field| {
+                inline for (struct_info.fields) |field, i| {
                     if (self.findString(field.name, 0)) |child| {
-                        @field(r, field.name) = try child.project(field.field_type);
+                        try child.imprint(checks, &@field(r, field.name));
+                    } else if (checks.field_exists) {
+                        return error.FieldDoesNotExist;
                     }
                 }
-                return r;
+                onto_ptr.* = r;
             },
             // Only handle [N]?T, where T is any other valid type.
             .Array => |array_info| {
@@ -1019,53 +1054,67 @@ pub const ZNode = struct {
                     if (i >= self.getChildCount()) {
                         break;
                     }
-                    r[i] = try self.getChild(i).?.project(array_info.child);
+                    try self.getChild(i).?.imprint(checks, &r[i]);
                 }
-                return r;
+                onto_ptr.* = r;
             },
             // Only handle []const u8 and ZNode pointers.
             .Pointer => |ptr_info| {
                 switch (ptr_info.size) {
                     .One => {
-                        if (ptr_info.child != ZNode) return error.ExpectedZNodePointer;
-                        return self;
+                        if (ptr_info.child != ZNode) {
+                            if (checks.invalid_types) {
+                                return error.ExpectedZNodePointer;
+                            }
+                        } else {
+                            onto_ptr.* = self;
+                        }
                     },
                     .Slice => {
                         switch (self.value) {
                             .String, .StringRef => {
-                                if (ptr_info.child != u8) return error.ExpectedStringSlice;
-                                return self.getString().?;
+                                if (ptr_info.child != u8) {
+                                    if (checks.invalid_types) {
+                                        return error.NonStringSlice;
+                                    }
+                                } else {
+                                    if (self.getChild(0)) |child| {
+                                        onto_ptr.* = child.getString().?;
+                                    } else if (checks.child_exists) {
+                                        return error.ChildDoesNotExist;
+                                    }
+                                }
                             },
-                            else => return error.ExpectedStringNode,
+                            else => if (checks.correct_type) return error.ExpectedStringNode,
                         }
+                        return;
                     },
-                    else => @compileError("Unable to project into type '" ++ @typeName(T) ++ "'"),
+                    else => if (checks.invalid_types) return error.InvalidType,
                 }
             },
-            else => @compileError("Unable to project into type '" ++ @typeName(T) ++ "'"),
+            else => if (checks.invalid_types) return error.InvalidType,
         }
     }
 };
 
-const ExampleEnum = enum {
-    Foo,
-};
-
-const EmbeddedStruct = struct {
-    name: []const u8 = "default",
-    params: ?*const ZNode = null,
-};
-
-const ExampleStruct = struct {
-    max_particles: ?i32 = null,
-    texture: []const u8 = "default",
-    systems: [20]?EmbeddedStruct = [_]?EmbeddedStruct{null} ** 20,
-    en: ?ExampleEnum = null,
-};
-
-test "node projection" {
+test "node conforming imprint" {
     const testing = std.testing;
 
+    const ConformingEnum = enum {
+        Foo,
+    };
+
+    const ConformingSubStruct = struct {
+        name: []const u8 = "default",
+        params: *const ZNode = undefined,
+    };
+
+    const ConformingStruct = struct {
+        max_particles: ?i32 = undefined,
+        texture: []const u8 = "default",
+        systems: [20]?ConformingSubStruct = [_]?ConformingSubStruct{null} ** 20,
+        en: ?ConformingEnum = null,
+    };
 
     const text =
         \\max_particles: 100
@@ -1076,21 +1125,49 @@ test "node projection" {
         \\    params:
         \\      some,stuff,hehe
         \\  : name:Fire
-        \\    params: more stuff: and children
+        \\    params
     ;
     var node = try parse(testing.allocator, &ParseOptions{}, text);
     defer node.deinit();
-    // TODO
-    const example = try node.project(ExampleStruct);
-    std.debug.print("{}\n", .{example});
-    for (example.systems) |ex, i| {
-        std.debug.print("{} ({}): \n", .{i, ex != null});
-        if (ex) |e| {
-            if (e.params) |p| {
-                p.show();
-            }
-        }
-    }
+
+    var example = ConformingStruct{};
+    try node.imprint(ZNode.ImbueChecks{
+        .field_exists = true, .child_exists = true,
+        .correct_type = true,
+    }, &example);
+    testing.expectEqual(@as(i32, 100), example.max_particles.?);
+    testing.expectEqualSlices(u8, "circle", example.texture);
+    testing.expect(null != example.systems[0]);
+    testing.expect(null != example.systems[1]);
+    testing.expectEqual(@as(?ConformingSubStruct, null), example.systems[2]);
+    testing.expectEqual(ConformingEnum.Foo, example.en.?);
+    testing.expectEqualSlices(u8, "params", example.systems[0].?.params.getString().?);
+}
+
+test "node nonconforming imprint" {
+    const testing = std.testing;
+
+    const NonConformingStruct = struct {
+        max_particles: bool = undefined,
+        no_exist: bool = undefined,
+    };
+
+    const text =
+        \\max_particles: 100
+        \\texture: circle
+        \\en: Foo
+        \\systems:
+        \\  : name:Emitter
+        \\    params:
+        \\      some,stuff,hehe
+        \\  : name:Fire
+    ;
+    var node = try parse(testing.allocator, &ParseOptions{}, text);
+    defer node.deinit();
+
+    var example = NonConformingStruct{};
+    try node.imprint(ZNode.ImbueChecks{.correct_type = false}, &example);
+    testing.expectError(error.FieldDoesNotExist, node.imprint(ZNode.ImbueChecks{.field_exists = true, .correct_type = false}, &example));
 }
 
 test "node initialization and setting" {
