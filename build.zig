@@ -32,6 +32,10 @@ const examples = [_]Example{
         .name = "basic-nodes",
         .path = "examples/basic_nodes.zig",
     },
+    Example{
+        .name = "static-nodes",
+        .path = "examples/static_nodes.zig",
+    },
 };
 
 pub fn build(b: *Builder) !void {
