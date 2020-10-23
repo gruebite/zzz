@@ -25,16 +25,20 @@ const Example = struct {
 
 const examples = [_]Example{
     Example{
-        .name = "basic-usage",
-        .path = "examples/basic_usage.zig",
+        .name = "dynamic-tree",
+        .path = "examples/dynamic_tree.zig",
     },
     Example{
-        .name = "basic-nodes",
-        .path = "examples/basic_nodes.zig",
+        .name = "parsing",
+        .path = "examples/parsing.zig",
     },
     Example{
-        .name = "static-nodes",
-        .path = "examples/static_nodes.zig",
+        .name = "static-imprint",
+        .path = "examples/static_imprint.zig",
+    },
+    Example{
+        .name = "static-tree",
+        .path = "examples/static_tree.zig",
     },
 };
 

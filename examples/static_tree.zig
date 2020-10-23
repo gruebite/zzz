@@ -27,7 +27,7 @@ pub fn main() !void {
     big_tree.show();
 
     // Find all servlet names.
-    var depth: usize = 0;
+    var depth: isize = 0;
     var iter = root;
     while (iter.next(&depth)) |n| : (iter = n) {
         if (n.value.equals(.{.String = "servlet-name"})) {

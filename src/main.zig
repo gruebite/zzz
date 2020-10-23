@@ -96,6 +96,8 @@ const std = @import("std");
 pub const ZNodeToken = struct {
     const Self = @This();
     /// 0 is top level children.
+    /// TODO: This is different from other interfaces which take an isize, and start from 1, 0
+    /// being root.
     depth: usize,
     /// The extent of the slice.
     start: usize,
@@ -621,7 +623,7 @@ pub const ZValue = union(enum) {
 };
 
 /// Transformer function. Level is tree depth, so top depth nodes have a depth of 1.
-pub fn defaultTransformer(context: void, value: ZValue, depth: usize) anyerror!ZValue {
+pub fn defaultTransformer(context: void, value: ZValue, depth: isize) anyerror!ZValue {
     if (value != .String) {
         return value;
     }
@@ -656,8 +658,9 @@ pub const ZStaticNode = struct {
     sibling: ?*ZStaticNode = null,
     child: ?*ZStaticNode = null,
 
-    /// Returns the next Node in the tree. Will return Null after reaching root.
-    pub fn next(self: *const Self, depth: *usize) ?*ZStaticNode {
+    /// Returns the next Node in the tree. Will return Null after reaching root. For nodes further
+    /// down the tree, they will bubble up, resulting in a negative depth.
+    pub fn next(self: *const Self, depth: *isize) ?*ZStaticNode {
         if (self.child) |c| {
             depth.* += 1;
             return c;
@@ -680,7 +683,7 @@ pub const ZStaticNode = struct {
     }
 
     /// Returns the next node in the tree until reaching root or the stopper node.
-    pub fn nextUntil(self: *const Self, stopper: *const ZStaticNode, depth: *usize) ?*ZStaticNode {
+    pub fn nextUntil(self: *const Self, stopper: *const ZStaticNode, depth: *isize) ?*ZStaticNode {
         const node = self.next(depth);
         if (node) |n| {
             if (n != stopper) {
@@ -748,13 +751,10 @@ pub const ZStaticNode = struct {
 
     /// Traverses descendants until a node with the tag is found.
     pub fn findNthAnyDescendant(self: *const Self, nth: usize, value: @TagType(ZValue)) ?*const ZStaticNode {
-        var depth: usize = 0;
+        var depth: isize = 0;
         var count: usize = 0;
         var iter: *const ZStaticNode = self;
-        while (iter.next(&depth)) |n| : (iter = n) {
-            if (n == self) {
-                break;
-            }
+        while (iter.nextUntil(self, &depth)) |n| : (iter = n) {
             if (n.value == tag) {
                 if (count == nth) {
                     return n;
@@ -767,13 +767,10 @@ pub const ZStaticNode = struct {
 
     /// Traverses descendants until a node with the specific value is found.
     pub fn findNthDescendant(self: *const Self, nth: usize, value: ZValue) ?*const ZStaticNode {
-        var depth: usize = 0;
+        var depth: isize = 0;
         var count: usize = 0;
         var iter: *const ZStaticNode = self;
-        while (iter.next(&depth)) |n| : (iter = n) {
-            if (n == self) {
-                break;
-            }
+        while (iter.nextUntil(self, &depth)) |n| : (iter = n) {
             if (n.value.equals(value)) {
                 if (count == nth) {
                     return n;
@@ -786,29 +783,29 @@ pub const ZStaticNode = struct {
 
     /// Iteratively transforms node values. Can pass a context, like an allocator. This can be used
     /// free resources too.
-    pub fn transform(self: *Self, comptime C: type, context: C, transformer: fn(C, ZValue, usize) anyerror!ZValue) anyerror!void {
-        var depth: usize = 0;
+    pub fn transform(self: *Self, comptime C: type, context: C, transformer: fn(C, ZValue, isize) anyerror!ZValue) anyerror!void {
+        var depth: isize = 0;
         var iter: *const ZStaticNode = self;
-        while (iter.next(&depth)) |c| : (iter = c) {
+        while (iter.nextUntil(self, &depth)) |c| : (iter = c) {
             c.value = try transformer(context, c.value, depth);
         }
     }
 
     /// Iteratively traverses the tree, passing the node.
-    pub fn traverse(self: *Self, comptime C: type, context: C, traverser: fn(C, *ZStaticNode, usize) anyerror!void) anyerror!void {
-        var depth: usize = 0;
+    pub fn traverse(self: *Self, comptime C: type, context: C, traverser: fn(C, *ZStaticNode, isize) anyerror!void) anyerror!void {
+        var depth: isize = 0;
         var iter: *const ZStaticNode = self;
-        while (iter.next(&depth)) |c| : (iter = c) {
+        while (iter.nextUntil(self, &depth)) |c| : (iter = c) {
             try traverser(context, c, depth);
         }
     }
 
     pub fn show(self: *const Self) void {
         std.debug.print("{}\n", .{self.value});
-        var depth: usize = 0;
+        var depth: isize = 0;
         var iter: *const ZStaticNode = self;
-        while (iter.next(&depth)) |c| : (iter = c) {
-            var i: usize = 0;
+        while (iter.nextUntil(self, &depth)) |c| : (iter = c) {
+            var i: isize = 0;
             while (i < depth) : (i += 1) {
                 std.debug.print("  ", .{});
             }
@@ -1039,7 +1036,7 @@ pub const ZNode = struct {
         self.show_(0);
     }
 
-    fn transform_(self: *Self, comptime C: type, context: C, transformer: fn(C, ZValue, usize) anyerror!ZValue, depth: usize) anyerror!void {
+    fn transform_(self: *Self, comptime C: type, context: C, transformer: fn(C, ZValue, isize) anyerror!ZValue, depth: isize) anyerror!void {
         self.value = try transformer(context, self.value, depth);
         for (self.getChildren()) |*child| {
             try child.transform_(C, context, transformer, depth + 1);
@@ -1048,11 +1045,11 @@ pub const ZNode = struct {
 
     /// Recursively transforms node values. Can pass a context, like an allocator. This can be used
     /// free resources too.
-    pub fn transform(self: *Self, comptime C: type, context: C, transformer: fn(C, ZValue, usize) anyerror!ZValue) anyerror!void {
+    pub fn transform(self: *Self, comptime C: type, context: C, transformer: fn(C, ZValue, isize) anyerror!ZValue) anyerror!void {
         return self.transform_(C, context, transformer, 0);
     }
 
-    fn traverse_(self: *Self, comptime C: type, context: C, traverser: fn(C, *ZNode, usize) anyerror!void, depth: usize) anyerror!void {
+    fn traverse_(self: *Self, comptime C: type, context: C, traverser: fn(C, *ZNode, isize) anyerror!void, depth: isize) anyerror!void {
         self.value = try traverser(context, self, depth);
         for (self.getChildren()) |*child| {
             child.traverse_(C, context, traverser, depth + 1);
@@ -1060,7 +1057,7 @@ pub const ZNode = struct {
     }
 
     /// Recursively traverses the tree, passing the node.
-    pub fn traverse(self: *Self, comptime C: type, context: C, traverser: fn(C, *ZNode, usize) anyerror!void) anyerror!void {
+    pub fn traverse(self: *Self, comptime C: type, context: C, traverser: fn(C, *ZNode, isize) anyerror!void) anyerror!void {
         return self.traverse_(C, context, traverser, 0);
     }
 };
@@ -1193,7 +1190,7 @@ pub fn parse(allocator: *std.mem.Allocator, text: []const u8) !ZNode {
     var stack: [MAX_DEPTH]*ZNode = undefined;
     var node = ZNode.init(allocator, .Null);
     stack[0] = &node;
-    var stack_depth: usize = 0;
+    var stack_depth: usize = 1;
     errdefer stack[0].deinit();
 
     var stream = StreamingParser.init();
@@ -1342,12 +1339,14 @@ pub fn imprint(self: anytype, checks: ImprintChecks, onto_ptr: anytype) anyerror
             }
         },
         .Enum => {
+            std.debug.print("ENUM {}\n", .{self});
             if (self.getChild(0)) |child| {
                 switch (child.value) {
                     .Int => |int| {
                         onto_ptr.* = try std.meta.intToEnum(T, int);
                     },
                     .String => {
+                        std.debug.print("ENUM {}\n", .{child});
                         if (std.meta.stringToEnum(T, child.value.String)) |e| {
                             onto_ptr.* = e;
                         } else {
@@ -1400,7 +1399,7 @@ pub fn imprint(self: anytype, checks: ImprintChecks, onto_ptr: anytype) anyerror
         .Pointer => |ptr_info| {
             switch (ptr_info.size) {
                 .One => {
-                    if (ptr_info.child != ZNode) {
+                    if (ptr_info.child != ZNode and ptr_info.child != ZStaticNode) {
                         if (checks.invalid_types) {
                             return error.ExpectedZNodePointer;
                         }
