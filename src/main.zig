@@ -517,6 +517,19 @@ test "parsing depths" {
     testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 2);
 }
 
+/// Parses the stream, outputting ZNodeTokens which reference the text.
+pub fn parseStream(stream: *StreamingParser, idx: *usize, text: []const u8) !?ZNodeToken {
+    while (idx.* <= text.len) {
+        // Insert an extra newline at the end of the stream.
+        const node = if (idx.* == text.len) try stream.feed('\n') else try stream.feed(text[idx.*]);
+        idx.* += 1;
+        if (node) |n| {
+            return n;
+        }
+    }
+    return null;
+}
+
 /// Transformer function. Level is tree depth, so top depth nodes have a depth of 1.
 pub fn defaultTransformer(context: void, value: ZValue, depth: usize) anyerror!ZValue {
     if (value != .String) {
@@ -696,7 +709,7 @@ pub fn ZStaticTree(comptime R: usize, comptime S: usize) type {
 
             var stream = StreamingParser.init();
             var idx: usize = 0;
-            while (try parseText(&stream, &idx, text)) |token| {
+            while (try parseStream(&stream, &idx, text)) |token| {
                 const slice = text[token.start..token.end];
                 const value: ZValue = if (slice.len == 0) .Null else .{.String = slice};
                 // Math works better with depth starting at one.
@@ -730,14 +743,17 @@ pub fn ZStaticTree(comptime R: usize, comptime S: usize) type {
             return root;
         }
 
+        /// Clears the entire tree.
         pub fn clear(self: *Self) void {
             self.root_count = 0;
         }
 
+        /// Returns a slice of active roots.
         pub fn rootSlice(self: *const Self) []const *ZStaticNode {
             return self.roots[0..self.root_count];
         }
 
+        /// Adds a node given a parent. Null parent starts a new root.
         pub fn addNode(self: *Self, parent: ?*ZStaticNode, value: ZValue) ZStaticError!*ZStaticNode {
             if (self.node_count >= S) {
                 return ZStaticError.TreeFull;
@@ -1240,18 +1256,6 @@ test "node appending and searching" {
     testing.expect(root.isLeaf());
 }
 
-fn parseText(stream: *StreamingParser, idx: *usize, text: []const u8) !?ZNodeToken {
-    while (idx.* <= text.len) {
-        // Insert an extra newline at the end of the stream.
-        const node = if (idx.* == text.len) try stream.feed('\n') else try stream.feed(text[idx.*]);
-        idx.* += 1;
-        if (node) |n| {
-            return n;
-        }
-    }
-    return null;
-}
-
 /// Parses a text block and returns the root `ZNode`. All `ZNode`s will just reference the text and
 /// will not make any string allocations.
 pub fn parse(allocator: *std.mem.Allocator, text: []const u8) !ZNode {
@@ -1264,7 +1268,7 @@ pub fn parse(allocator: *std.mem.Allocator, text: []const u8) !ZNode {
 
     var stream = StreamingParser.init();
     var idx: usize = 0;
-    while (try parseText(&stream, &idx, text)) |token| {
+    while (try parseStream(&stream, &idx, text)) |token| {
         const slice = text[token.start..token.end];
         if (token.depth <= stack_depth) {
             stack_depth = token.depth;
