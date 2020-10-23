@@ -31,7 +31,7 @@ pub const Monster = struct {
     health: i32 = 0,
     attacks: [MAX_ATTACKS]?Attack = [_]?Attack{null} ** MAX_ATTACKS,
     // Structs can be partially filled to defer more complex or dynamic structures.
-    complex: ?*const zzz.ZStaticNode = null,
+    complex: ?zzz.ZAnyNode = null,
 };
 
 pub fn main() !void {
@@ -58,5 +58,5 @@ pub fn main() !void {
         std.debug.print("    Range: {}\n", .{att.range});
         std.debug.print("    Description: {}\n\n", .{att.description});
     }
-    monster.complex.?.show();
+    monster.complex.?.ZStaticNode.show();
 }

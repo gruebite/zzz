@@ -648,6 +648,12 @@ pub const ZStaticError = error {
     TooManyRoots,
 };
 
+/// Can represent either a static node or dynamic one.
+pub const ZAnyNode = union(enum) {
+    ZStaticNode: *const ZStaticNode,
+    ZNode: *const ZNode,
+};
+
 /// Represents a node in a static tree. Nodes have a parent, child, and sibling pointer
 /// to a spot in the array.
 pub const ZStaticNode = struct {
@@ -1344,7 +1350,20 @@ pub fn imprint(self: anytype, checks: ImprintChecks, onto_ptr: anytype) anyerror
             };
             if (!err) { onto_ptr.* = t; }
         },
+        .Union => |union_info| {
+            if (T == ZAnyNode) {
+                if (@typeInfo(@TypeOf(self)).Pointer.child == ZNode) {
+                    onto_ptr.* = ZAnyNode{.ZNode = self};
+                }
+                if (@typeInfo(@TypeOf(self)).Pointer.child == ZStaticNode) {
+                    onto_ptr.* = ZAnyNode{.ZStaticNode = self};
+                }
+            } else {
+                return error.InvalidType;
+            }
+        },
         .Struct => |struct_info| {
+            std.debug.print("{}\n", .{struct_info});
             var r: T = T{};
             inline for (struct_info.fields) |field, i| {
                 if (self.findNth(0, .{.String = field.name})) |child_field| {
@@ -1384,12 +1403,12 @@ pub fn imprint(self: anytype, checks: ImprintChecks, onto_ptr: anytype) anyerror
         .Pointer => |ptr_info| {
             switch (ptr_info.size) {
                 .One => {
-                    if (ptr_info.child != ZNode and ptr_info.child != ZStaticNode) {
-                        if (checks.invalid_types) {
-                            return error.ExpectedZNodePointer;
-                        }
-                    } else {
+                    if (ptr_info.child != ZNode or ptr_info.child != ZStaticNode) {
                         onto_ptr.* = self;
+                        return;
+                    }
+                    if (checks.invalid_types) {
+                        return error.ExpectedZNodePointer;
                     }
                 },
                 .Slice => {
