@@ -1141,12 +1141,14 @@ pub fn imprint(self: *const ZNode, checks: ImprintChecks, onto_ptr: anytype) any
         .Float, .ComptimeFloat => {
             onto_ptr.* = switch (self.value) {
                 .Float => |n| @floatCast(f32, n),
+                .Int => |n| @intToFloat(f32, n),
                 else => if (checks.correct_type) return error.ExpectedFloat else return,
             };
         },
         .Int, .ComptimeInt => {
             onto_ptr.* = switch (self.value) {
                 .Int => |n| @intCast(i32, n),
+                .Bool => |n| @boolToInt(n),
                 else => if (checks.correct_type) return error.ExpectedInt else return,
             };
         },
@@ -1179,6 +1181,9 @@ pub fn imprint(self: *const ZNode, checks: ImprintChecks, onto_ptr: anytype) any
         .Struct => |struct_info| {
             var r: T = T{};
             inline for (struct_info.fields) |field, i| {
+                if (field.name[0] == '_') {
+                    continue;
+                }
                 if (self.findNth(0, .{.String = field.name})) |child_field| {
                     // Special case for pointers, we just take the whole node.
                     const info = @typeInfo(field.field_type);
