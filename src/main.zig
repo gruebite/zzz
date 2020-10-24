@@ -1182,7 +1182,10 @@ pub fn imprint(self: *const ZNode, checks: ImprintChecks, onto_ptr: anytype) any
                 if (self.findNth(0, .{.String = field.name})) |child_field| {
                     // Special case for pointers, we just take the whole node.
                     const info = @typeInfo(field.field_type);
-                    if (info == .Pointer and info.Pointer.size == .One) {
+                    if ((info == .Optional
+                            and @typeInfo(info.Optional.child) == .Pointer
+                            and @typeInfo(info.Optional.child).Pointer.size == .One) or
+                        (info == .Pointer and info.Pointer.size == .One)) {
                         try imprint(child_field, checks, &@field(r, field.name));
                     } else {
                         if (child_field.getChild(0)) |child| {
