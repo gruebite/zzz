@@ -29,6 +29,10 @@ const examples = [_]Example{
         .path = "examples/building_tree.zig",
     },
     Example{
+        .name = "loading-particles",
+        .path = "examples/loading_particles.zig",
+    },
+    Example{
         .name = "static-imprint",
         .path = "examples/static_imprint.zig",
     },

@@ -176,7 +176,7 @@ pub const StreamingParser = struct {
 
     pub fn hasCompleted(self: *const Self) bool {
         switch (self.state) {
-            .ExpectZNode, .OpenLine, .EndString, .Comment, .OpenComment => return true,
+            .ExpectZNode, .OpenLine, .EndString, .Comment, .OpenComment, .Indent => return true,
             else => return false,
         }
     }
