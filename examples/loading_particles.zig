@@ -8,6 +8,6 @@ pub fn main() !void {
     var tree = zzz.ZTree(1, 1000){};
     const root = try tree.appendText(particles);
 
-    root.show();
+    try root.stringifyPretty(std.io.getStdOut().writer());
     std.debug.print("Node count: {}\n", .{tree.node_count});
 }

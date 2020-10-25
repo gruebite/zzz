@@ -683,13 +683,30 @@ pub const ZNode = struct {
 
     /// Returns the next node in the tree until reaching root or the stopper node.
     pub fn nextUntil(self: *const Self, stopper: *const ZNode, depth: *isize) ?*ZNode {
-        const node = self.next(depth);
-        if (node) |n| {
-            if (n != stopper) {
-                return n;
+        if (self.child) |c| {
+            if (c == stopper) { return null; }
+            depth.* += 1;
+            return c;
+        } else if (self.sibling) |c| {
+            if (c == stopper) { return null; }
+            return c;
+        } else {
+            // Go up and forward.
+            var iter: ?*const ZNode = self;
+            while (iter != null) {
+                iter = iter.?.parent;
+                // All these checks. :/
+                if (iter == stopper) { return null; }
+                if (iter != null) {
+                    depth.* -= 1;
+                    if (iter.?.sibling) |c| {
+                        if (c == stopper) { return null; }
+                        return c;
+                    }
+                }
             }
+            return null;
         }
-        return null;
     }
 
     /// Returns the nth child.
@@ -822,6 +839,75 @@ pub const ZNode = struct {
                 try out_stream.writeAll(",");
             }
             try n.value.stringify(out_stream);
+        }
+    }
+
+    fn _moreThanOneDescendant(self: *const Self) bool {
+        var depth: isize = 0;
+        var count: usize = 0;
+        var iter: *const ZNode = self;
+        while (iter.nextUntil(self, &depth)) |n| : (iter = n) {
+            count += 1;
+            if (count > 1) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    fn _stringifyPretty(self: *const Self, out_stream: anytype) @TypeOf(out_stream).Error!void {
+        //
+        try self.value.stringify(out_stream);
+        try out_stream.writeAll(":");
+        if (self.getChildCount() > 1) {
+            try out_stream.writeAll("\n  ");
+        }
+        var depth: isize = 0;
+        var last_depth: isize = 1;
+        var iter = self;
+        while (iter.nextUntil(self, &depth)) |n| : (iter = n) {
+            if (depth > last_depth) {
+                last_depth = depth;
+                try out_stream.writeAll(":");
+                // Likely an array.
+                if (n.parent.?.value == .Null) {
+                    try out_stream.writeAll(" ");
+                } else if (n.parent.?._moreThanOneDescendant()) {
+                    try out_stream.writeAll("\n");
+                    var i: isize = 0;
+                    while (i < depth) : (i += 1) {
+                        std.debug.print("  ", .{});
+                    }
+                } else {
+                    try out_stream.writeAll(" ");
+                }
+            } else if (depth < last_depth) {
+                while (depth < last_depth) {
+                    last_depth -= 1;
+                }
+                try out_stream.writeAll("\n");
+                var i: isize = 0;
+                while (i < depth) : (i += 1) {
+                    std.debug.print("  ", .{});
+                }
+            } else if (depth > 1) {
+                try out_stream.writeAll(",");
+            }
+            try n.value.stringify(out_stream);
+        }
+    }
+
+    /// Outputs a `ZNode` and its children on multiple lines.
+    /// Arrays with children that have:
+    /// - null elements, separate lines
+    /// - non-null same line
+    pub fn stringifyPretty(self: *const Self, out_stream: anytype) @TypeOf(out_stream).Error!void {
+        // Assume root, so don't print this node.
+        var iter: ?*const ZNode = self.child;
+        while (iter) |n| {
+            try n._stringifyPretty(out_stream);
+            try out_stream.writeAll("\n");
+            iter = n.sibling;
         }
     }
 
