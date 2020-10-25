@@ -283,6 +283,10 @@ pub const StreamingParser = struct {
                     if (self.state == .EndString) {
                         return Error.InvalidCharacterAfterString;
                     }
+                    // Don't start another string.
+                    if (self.state == .OpenCharacter) {
+                        return null;
+                    }
                     // We start here to account for the possibility of a string being ""
                     self.start_index = self.current_index + 1;
                     self.state = .Quotation;
@@ -290,6 +294,10 @@ pub const StreamingParser = struct {
                 '[' => {
                     if (self.state == .EndString) {
                         return Error.InvalidCharacterAfterString;
+                    }
+                    // Don't start another string.
+                    if (self.state == .OpenCharacter) {
+                        return null;
                     }
                     self.open_string_level = 0;
                     self.state = .MultilineOpen0;
@@ -572,6 +580,7 @@ pub const ZValue = union(enum) {
                 const chars_count = @sizeOf(@TypeOf(chars));
                 var need_escape = false;
                 var found = [_]bool{false} ** chars_count;
+                var level: usize = 0;
                 for ("\"\n\t\r,:;") |ch, i| {
                     const f = find(u8, self.String, ch);
                     if (f != null) {
@@ -579,6 +588,7 @@ pub const ZValue = union(enum) {
                         need_escape = true;
                     }
                 }
+                // TODO: Escaping ]] in string.
                 if (need_escape) {
                     // 0=" 1=\n
                     if (found[0] or found[1]) {
