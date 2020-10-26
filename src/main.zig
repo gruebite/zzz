@@ -1375,7 +1375,7 @@ pub fn imprint(self: *const ZNode, opts: ImprintOptions, onto_ptr: anytype) anye
     }
 }
 
-/// A useful factory of dynamic objects via zzz nodes. Register types and instantiate them when
+/// A useful factory of dynamic objects via zzz nodes. Register types and instantiate them with
 /// nodes. The type provided is an interface type that has field function pointers to be used
 /// with `@fieldParentPtr`
 pub fn ZFactory(comptime T: type) type {
@@ -1441,7 +1441,7 @@ pub fn ZFactory(comptime T: type) type {
 
 /// Makes a default intiializer that allocates and imprints a ZNode. Requires the interface type,
 /// the containing struct type, the interface field name, and a list of initializer fields for
-/// the interface, typically function pointers.
+/// the interface, typically function pointers. The interface functions must have a `Fn` postfix.
 pub fn makezinit(
         comptime I: type,
         comptime T: type,
@@ -1452,7 +1452,7 @@ pub fn makezinit(
             var self = try allocator.create(T);
             self.* = .{};
             inline for (std.meta.fields(@TypeOf(fields))) |fld| {
-                @field(@field(self, ifield), fld.name ++ "Fn") = @field(fields, fld.name);
+                @field(@field(self, ifield), fld.name) = @field(fields, fld.name);
             }
             try imprint(argz, ImprintOptions{}, self);
             return &@field(self, ifield);
@@ -1462,11 +1462,66 @@ pub fn makezinit(
 
 /// Makes a default deinitialize. If you have a custom initializer, you'll likely want a custom
 /// deinitializer.
-pub fn makezdeinit(comptime I: type, comptime T: type, comptime ifield: []const u8) fn(i: *I, allocator: *std.mem.Allocator) void {
+pub fn makezdeinit(comptime I: type, comptime T: type, comptime ifield: []const u8) fn(i: *const I, allocator: *std.mem.Allocator) void {
     return struct {
-        pub fn f(i: *I, allocator: *std.mem.Allocator) void {
+        pub fn f(i: *const I, allocator: *std.mem.Allocator) void {
             var self = @fieldParentPtr(T, ifield, i);
             allocator.destroy(self);
         }
     }.f;
+}
+
+
+pub const FooInterface = struct {
+    const Self = @This();
+
+    fooFn: ?fn(*Self) void = null,
+
+    // Should always have a deinit.
+    deinitFn: fn(*const Self, *std.mem.Allocator) void = undefined,
+
+    pub fn foo(self: *Self) void {
+        return self.fooFn.?(self);
+    }
+    pub fn deinit(self: *const Self, allocator: *std.mem.Allocator) void {
+        self.deinitFn(self, allocator);
+    }
+};
+
+pub const FooBar = struct {
+    const Self = @This();
+    const ZNAME = "Foo";
+    // Necessary to auto initialize zzz structs.
+    _foo: FooInterface = .{},
+    bar: i32 = 0,
+
+    pub const zinit = makezinit(FooInterface, FooBar, "_foo", .{
+        .fooFn = foo,
+        .deinitFn = deinit,
+    });
+    pub const deinit = makezdeinit(FooInterface, FooBar, "_foo");
+
+    pub fn foo(f: *FooInterface) void {
+        var self = @fieldParentPtr(FooBar, "_foo", f);
+        std.debug.print("{}\n", .{self.bar});
+    }
+};
+
+test "factory" {
+    const testing = std.testing;
+
+    const text =
+        \\name:Foo
+        \\bar:42
+    ;
+
+    var tree = ZTree(1, 100){};
+    var root = try tree.appendText(text);
+    try root.transform(void, {}, defaultTransformer);
+
+    var factory = ZFactory(FooInterface).init(testing.allocator);
+    defer factory.deinit();
+    try factory.register(FooBar);
+    const foobar = try factory.instantiate(testing.allocator, root);
+    defer foobar.deinit(testing.allocator);
 }
