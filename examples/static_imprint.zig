@@ -46,7 +46,7 @@ pub fn main() !void {
 
     var monster = Monster{};
     // Imprint takes a pointer to a node and a struct.
-    try zzz.imprint(node, zzz.ImprintChecks{}, &monster);
+    try zzz.imprint(node, zzz.ImprintOptions{}, &monster);
 
     std.debug.print("Name: {}\n", .{monster.name});
     std.debug.print("Health: {}\n", .{monster.health});

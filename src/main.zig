@@ -1091,9 +1091,9 @@ test "node conforming imprint" {
     try node.transform(void, {}, defaultTransformer);
 
     var example = ConformingStruct{};
-    try imprint(node, ImprintChecks{
-        .field_exists = true, .child_exists = true,
-        .correct_type = true,
+    try imprint(node, ImprintOptions{
+        .ensure_node_exists = true, .ensure_value_exists = true,
+        .ensure_correct_value_type = true,
     }, &example);
     testing.expectEqual(@as(i32, 100), example.max_particles.?);
     testing.expectEqualSlices(u8, "circle", example.texture);
@@ -1127,8 +1127,8 @@ test "node nonconforming imprint" {
     try node.transform(void, {}, defaultTransformer);
 
     var example = NonConformingStruct{};
-    try imprint(node, ImprintChecks{.correct_type = false}, &example);
-    testing.expectError(error.FieldDoesNotExist, imprint(node, ImprintChecks{.field_exists = true, .correct_type = false}, &example));
+    try imprint(node, ImprintOptions{.ensure_correct_value_type = false}, &example);
+    testing.expectError(error.NodeDoesNotExist, imprint(node, ImprintOptions{.ensure_node_exists = true, .ensure_correct_value_type = false}, &example));
 }
 
 test "node appending and searching" {
@@ -1196,29 +1196,33 @@ test "parsing into nodes" {
     ;
 }
 
-/// Checks that can be enabled when calling `imprint` onto a struct.
-pub const ImprintChecks = packed struct {
+/// Options that can be enabled when calling `imprint` onto a struct.
+pub const ImprintOptions = packed struct {
     /// Return an error when a struct field is missing from the node tree.
-    field_exists: bool = false,
+    ensure_node_exists: bool = false,
     /// Returns an error when a field's node exists, but the value doesn't.
-    child_exists: bool = false,
+    ensure_value_exists: bool = false,
     /// Returns an error when a node's value is of the wrong type.
-    correct_type: bool = true,
+    ensure_correct_value_type: bool = true,
+    /// Enables number coersion.
+    coerce_numbers: bool = false,
+    /// Enabled coersion of ints to bools.
+    coerce_ints_to_bools: bool = false,
     /// Returns an error when a node couldn't be converted to an enum.
-    enum_converted: bool = true,
-    /// Returns an error when passed invalid types (even on the struct).
-    invalid_types: bool = true,
+    ensure_enum_converted: bool = true,
+    /// Returns an error when passed invalid types.
+    no_invalid_types: bool = true,
 };
 
 /// Imprints a node into a type. The only types allowed are zzz types, structs, fixed arrays,
 /// optionals, and enums. This function performs no allocations and u8 slices refer to strings
-/// by reference. Enums can be mapped from string or int. There are a few optional checks:
+/// by reference. Enums can be mapped from string or int. There are a few options:
 ///
-/// - `.NoCheck` perform no checks, if something can fit it'll fit.
+/// - `.NoCheck` perform no opts, if something can fit it'll fit.
 /// - `.CheckField`
 ///
 /// TODO: Removing anyerror causes infinite loop.
-pub fn imprint(self: *const ZNode, checks: ImprintChecks, onto_ptr: anytype) anyerror!void {
+pub fn imprint(self: *const ZNode, opts: ImprintOptions, onto_ptr: anytype) anyerror!void {
     if (@typeInfo(@TypeOf(onto_ptr)) != .Pointer) {
         @compileError("Passed struct must be a pointer.");
     }
@@ -1231,21 +1235,21 @@ pub fn imprint(self: *const ZNode, checks: ImprintChecks, onto_ptr: anytype) any
         .Bool => {
             onto_ptr.* = switch (self.value) {
                 .Bool => |b| b,
-                else => if (checks.correct_type) return error.ExpectedBool else return,
+                else => if (opts.ensure_correct_value_type) return error.ExpectedBool else return,
             };
         },
         .Float, .ComptimeFloat => {
             onto_ptr.* = switch (self.value) {
-                .Float => |n| @floatCast(f32, n),
-                .Int => |n| @intToFloat(f32, n),
-                else => if (checks.correct_type) return error.ExpectedFloat else return,
+                .Float => |n| if (opts.coerce_numbers) @floatCast(T, n) else @floatCast(f32, n),
+                .Int => |n| if (opts.coerce_numbers) @intToFloat(T, n) else return error.ExpectedFloat,
+                else => if (opts.ensure_correct_value_type) return error.ExpectedFloat else return,
             };
         },
         .Int, .ComptimeInt => {
             onto_ptr.* = switch (self.value) {
-                .Int => |n| @intCast(i32, n),
-                .Bool => |n| @boolToInt(n),
-                else => if (checks.correct_type) return error.ExpectedInt else return,
+                .Int => |n| if (opts.coerce_numbers) @intCast(T, n) else @intCast(i32, n),
+                .Bool => |n| if (opts.coerce_ints_to_bools) @boolToInt(n) else return error.ExpectedInt,
+                else => if (opts.ensure_correct_value_type) return error.ExpectedInt else return,
             };
         },
         .Enum => {
@@ -1257,16 +1261,16 @@ pub fn imprint(self: *const ZNode, checks: ImprintChecks, onto_ptr: anytype) any
                     if (std.meta.stringToEnum(T, self.value.String)) |e| {
                         onto_ptr.* = e;
                     } else {
-                        return if (checks.enum_converted) error.CouldNotConvertStringToEnum;
+                        return if (opts.ensure_enum_converted) error.CouldNotConvertStringToEnum;
                     }
                 },
-                else => if (checks.correct_type) return error.ExpectedIntOrString,
+                else => if (opts.ensure_correct_value_type) return error.ExpectedIntOrString,
             }
         },
         .Optional => |opt_info| {
             var t: opt_info.child = undefined;
             var err = false;
-            imprint(self, checks, &t) catch |e| {
+            imprint(self, opts, &t) catch |e| {
                 if (e != error.ChildDoesNotExist) {
                     return e;
                 }
@@ -1286,16 +1290,16 @@ pub fn imprint(self: *const ZNode, checks: ImprintChecks, onto_ptr: anytype) any
                             and @typeInfo(info.Optional.child) == .Pointer
                             and @typeInfo(info.Optional.child).Pointer.size == .One) or
                         (info == .Pointer and info.Pointer.size == .One)) {
-                        try imprint(child_field, checks, &@field(onto_ptr, field.name));
+                        try imprint(child_field, opts, &@field(onto_ptr, field.name));
                     } else {
                         if (child_field.getChild(0)) |child| {
-                            try imprint(child, checks, &@field(onto_ptr, field.name));
-                        } else {
-                            //return error.ChildDoesNotExist;
+                            try imprint(child, opts, &@field(onto_ptr, field.name));
+                        } else if (opts.ensure_value_exists) {
+                            return error.ChildDoesNotExist;
                         }
                     }
-                } else if (checks.field_exists) {
-                    return error.FieldDoesNotExist;
+                } else if (opts.ensure_node_exists) {
+                    return error.NodeDoesNotExist;
                 }
             }
         },
@@ -1309,7 +1313,7 @@ pub fn imprint(self: *const ZNode, checks: ImprintChecks, onto_ptr: anytype) any
                     if (i >= parent.getChildCount()) {
                         break;
                     }
-                    try imprint(parent.getChild(i).?, checks, &r[i]);
+                    try imprint(parent.getChild(i).?, opts, &r[i]);
                 }
                 onto_ptr.* = r;
             }
@@ -1322,28 +1326,28 @@ pub fn imprint(self: *const ZNode, checks: ImprintChecks, onto_ptr: anytype) any
                         onto_ptr.* = self;
                         return;
                     }
-                    if (checks.invalid_types) {
-                        return error.ExpectedZNodePointer;
+                    if (opts.no_invalid_types) {
+                        return error.InvalidPointerType;
                     }
                 },
                 .Slice => {
                     switch (self.value) {
                         .String, => {
                             if (ptr_info.child != u8) {
-                                if (checks.invalid_types) {
-                                    return error.NonStringSlice;
+                                if (opts.ensure_enum_converted) {
+                                    return error.InvalidNonStringSlice;
                                 }
                             } else {
                                 onto_ptr.* = self.value.String;
                             }
                         },
-                        else => if (checks.correct_type) return error.ExpectedStringNode,
+                        else => if (opts.ensure_correct_value_type) return error.ExpectedStringNode,
                     }
                     return;
                 },
-                else => if (checks.invalid_types) return error.InvalidType,
+                else => if (opts.no_invalid_types) return error.InvalidType,
             }
         },
-        else => if (checks.invalid_types) return error.InvalidType,
+        else => if (opts.no_invalid_types) return error.InvalidType,
     }
 }
