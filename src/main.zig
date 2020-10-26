@@ -1205,7 +1205,7 @@ pub const ImprintOptions = packed struct {
     /// Returns an error when a node's value is of the wrong type.
     ensure_correct_value_type: bool = true,
     /// Enables number coersion.
-    coerce_numbers: bool = false,
+    coerce_numbers: bool = true,
     /// Enabled coersion of ints to bools.
     coerce_ints_to_bools: bool = false,
     /// Returns an error when a node couldn't be converted to an enum.
@@ -1268,15 +1268,38 @@ pub fn imprint(self: *const ZNode, opts: ImprintOptions, onto_ptr: anytype) anye
             }
         },
         .Optional => |opt_info| {
-            var t: opt_info.child = undefined;
-            var err = false;
-            imprint(self, opts, &t) catch |e| {
-                if (e != error.ChildDoesNotExist) {
-                    return e;
-                }
-                err = true;
-            };
-            if (!err) { onto_ptr.* = t; }
+            // Special case for optional structs, otherwise fields won't be initialized.
+            // TODO: Investigate other special cases.
+            if (@typeInfo(opt_info.child) == .Struct) {
+                var t: opt_info.child = opt_info.child{};
+                var err = false;
+                imprint(self, opts, &t) catch |e| {
+                    if (e != error.ValueDoesNotExist) {
+                        return e;
+                    }
+                    err = true;
+                };
+                if (!err) { onto_ptr.* = t; }
+            } else if (@typeInfo(opt_info.child) != .Pointer) {
+                var t = std.mem.zeroes(opt_info.child);
+                var err = false;
+                imprint(self, opts, &t) catch |e| {
+                    if (e != error.ValueDoesNotExist) {
+                        return e;
+                    }
+                    err = true;
+                };
+                if (!err) { onto_ptr.* = t; }
+            } else {
+                // TODO: This is okay because we error on value not existing.
+                var t: opt_info.child = undefined;
+                var err = false;
+                imprint(self, opts, &t) catch |e| {
+                    // Missing check.
+                    err = true;
+                };
+                if (!err) { onto_ptr.* = t; }
+            }
         },
         .Struct => |struct_info| {
             inline for (struct_info.fields) |field, i| {
@@ -1295,7 +1318,7 @@ pub fn imprint(self: *const ZNode, opts: ImprintOptions, onto_ptr: anytype) anye
                         if (child_field.getChild(0)) |child| {
                             try imprint(child, opts, &@field(onto_ptr, field.name));
                         } else if (opts.ensure_value_exists) {
-                            return error.ChildDoesNotExist;
+                            return error.ValueDoesNotExist;
                         }
                     }
                 } else if (opts.ensure_node_exists) {
