@@ -1275,7 +1275,6 @@ pub fn imprint(self: *const ZNode, checks: ImprintChecks, onto_ptr: anytype) any
             if (!err) { onto_ptr.* = t; }
         },
         .Struct => |struct_info| {
-            var r: T = T{};
             inline for (struct_info.fields) |field, i| {
                 if (field.name[0] == '_') {
                     continue;
@@ -1287,10 +1286,10 @@ pub fn imprint(self: *const ZNode, checks: ImprintChecks, onto_ptr: anytype) any
                             and @typeInfo(info.Optional.child) == .Pointer
                             and @typeInfo(info.Optional.child).Pointer.size == .One) or
                         (info == .Pointer and info.Pointer.size == .One)) {
-                        try imprint(child_field, checks, &@field(r, field.name));
+                        try imprint(child_field, checks, &@field(onto_ptr, field.name));
                     } else {
                         if (child_field.getChild(0)) |child| {
-                            try imprint(child, checks, &@field(r, field.name));
+                            try imprint(child, checks, &@field(onto_ptr, field.name));
                         } else {
                             //return error.ChildDoesNotExist;
                         }
@@ -1299,7 +1298,6 @@ pub fn imprint(self: *const ZNode, checks: ImprintChecks, onto_ptr: anytype) any
                     return error.FieldDoesNotExist;
                 }
             }
-            onto_ptr.* = r;
         },
         // Only handle [N]?T, where T is any other valid type.
         .Array => |array_info| {
