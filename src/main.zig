@@ -1357,7 +1357,7 @@ pub fn imprint(self: *const ZNode, opts: ImprintOptions, onto_ptr: anytype) anye
                     switch (self.value) {
                         .String, => {
                             if (ptr_info.child != u8) {
-                                if (opts.ensure_enum_converted) {
+                                if (opts.no_invalid_types) {
                                     return error.InvalidNonStringSlice;
                                 }
                             } else {
@@ -1373,4 +1373,100 @@ pub fn imprint(self: *const ZNode, opts: ImprintOptions, onto_ptr: anytype) anye
         },
         else => if (opts.no_invalid_types) return error.InvalidType,
     }
+}
+
+/// A useful factory of dynamic objects via zzz nodes. Register types and instantiate them when
+/// nodes. The type provided is an interface type that has field function pointers to be used
+/// with `@fieldParentPtr`
+pub fn ZFactory(comptime T: type) type {
+    return struct {
+        const Self = @This();
+
+        const Ctor = struct {
+            func: fn(allocator: *std.mem.Allocator, argz: *const ZNode) anyerror!*T,
+        };
+
+        registered: std.StringHashMap(Ctor),
+
+        /// Create the factory. The allocator is for the internal HashMap. Instantiated objects
+        /// can have their own allocator.
+        pub fn init(allocator: *std.mem.Allocator) Self {
+            return Self {
+                .registered = std.StringHashMap(Ctor).init(allocator),
+            };
+        }
+
+        ///
+        pub fn deinit(self: *Self) void {
+            self.registered.deinit();
+        }
+
+        /// Registers an implementor of the interface. Requires ZNAME and zinit, and a deinit
+        /// method:
+        ///
+        ///
+        pub fn register(self: *Self, comptime S: anytype) !void {
+            const SI = @typeInfo(S);
+            if (SI != .Struct) {
+                @compileError("Expected struct got: " ++ @typeName(S));
+            }
+            if (!@hasDecl(S, "ZNAME")) {
+                @compileError("Missing `ZNAME` on registered struct: " ++ @typeName(S));
+            }
+            if (!@hasDecl(S, "zinit")) {
+                @compileError("Missing `zinit` on registered struct: " ++ @typeName(S));
+            }
+            const ctor = Ctor{
+                .func = S.zinit,
+            };
+            try self.registered.put(S.ZNAME, ctor);
+        }
+
+        /// Instantiates an object with ZNode. The node must have the first child node must be
+        /// "name" with the child value being the name of the registered struct. Sibling fields
+        /// are imprinted onto the struct.
+        ///
+        /// The caller is responsible for the memory.
+        pub fn instantiate(self: *Self, allocator: *std.mem.Allocator, node: *const ZNode) !*T {
+            const name = node.findNth(0, .{.String = "name"}) orelse return error.ZNodeMissingName;
+            const value_node = name.getChild(0) orelse return error.ZNodeMissingValueUnderName;
+            if (value_node.value != .String) {
+                return error.ZNodeNameValueNotString;
+            }
+            const ctor = self.registered.get(value_node.value.String) orelse return error.StructNotFound;
+            return try ctor.func(allocator, node);
+        }
+    };
+}
+
+/// Makes a default intiializer that allocates and imprints a ZNode. Requires the interface type,
+/// the containing struct type, the interface field name, and a list of initializer fields for
+/// the interface, typically function pointers.
+pub fn makezinit(
+        comptime I: type,
+        comptime T: type,
+        comptime ifield: []const u8,
+        fields: anytype) fn(allocator: *std.mem.Allocator, argz: *const ZNode) anyerror!*I {
+    return struct {
+        pub fn f(allocator: *std.mem.Allocator, argz: *const ZNode) anyerror!*I {
+            var self = try allocator.create(T);
+            self.* = .{};
+            inline for (std.meta.fields(@TypeOf(fields))) |fld| {
+                @field(@field(self, ifield), fld.name ++ "Fn") = @field(fields, fld.name);
+            }
+            try imprint(argz, ImprintOptions{}, self);
+            return &@field(self, ifield);
+        }
+    }.f;
+}
+
+/// Makes a default deinitialize. If you have a custom initializer, you'll likely want a custom
+/// deinitializer.
+pub fn makezdeinit(comptime I: type, comptime T: type, comptime ifield: []const u8) fn(i: *I, allocator: *std.mem.Allocator) void {
+    return struct {
+        pub fn f(i: *I, allocator: *std.mem.Allocator) void {
+            var self = @fieldParentPtr(T, ifield, i);
+            allocator.destroy(self);
+        }
+    }.f;
 }
