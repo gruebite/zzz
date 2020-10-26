@@ -743,6 +743,28 @@ pub const ZNode = struct {
         return count;
     }
 
+    /// Finds the next child after the given iterator. This is good for when you can guess the order
+    /// of the nodes, which can cut down on starting from the beginning. Passing null starts over
+    /// from the beginning. Returns the found node or null (it will loop back around).
+    pub fn findNext(self: *const Self, start: ?*const ZNode, value: ZValue) ?*const ZNode {
+        var iter: ?*const ZNode = self.child;
+        if (start) |si| {
+            iter = si.sibling;
+        }
+        while (iter != start) {
+            if (iter) |it| {
+                if (it.value.equals(value)) {
+                    return it;
+                }
+                iter = it.sibling;
+            } else {
+                // Loop back.
+                iter = self.child;
+            }
+        }
+        return null;
+    }
+
     /// Finds the nth child node with a specific tag.
     pub fn findNthAny(self: *const Self, nth: usize, tag: @TagType(ZValue)) ?*const ZNode {
         var count: usize = 0;
@@ -1052,6 +1074,17 @@ test "static tree" {
     var tree = ZTree(1, 100){};
     const node = try tree.appendText(text);
     try node.transform(void, {}, defaultTransformer);
+
+    var iter = node.findNext(null, .{.String = "max_particles"});
+    testing.expect(iter != null);
+    iter = node.findNext(iter, .{.String = "texture"});
+    testing.expect(iter != null);
+    iter = node.findNext(iter, .{.String = "max_particles"});
+    testing.expect(iter != null);
+    iter = node.findNext(iter, .{.String = "systems"});
+    testing.expect(iter != null);
+    iter = node.findNext(iter, .{.Int = 42});
+    testing.expect(iter == null);
 }
 
 test "node conforming imprint" {
@@ -1302,11 +1335,16 @@ pub fn imprint(self: *const ZNode, opts: ImprintOptions, onto_ptr: anytype) anye
             }
         },
         .Struct => |struct_info| {
+            var iter: ?*const ZNode = null;
+
             inline for (struct_info.fields) |field, i| {
                 if (field.name[0] == '_') {
                     continue;
                 }
-                if (self.findNth(0, .{.String = field.name})) |child_field| {
+                const found = self.findNext(iter, .{.String = field.name});
+                if (found) |child_field| {
+                    // Found, set the iterator here.
+                    iter = found;
                     // Special case for pointers, we just take the whole node.
                     const info = @typeInfo(field.field_type);
                     if ((info == .Optional
