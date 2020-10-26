@@ -719,10 +719,37 @@ pub const ZNode = struct {
         }
     }
 
-    /// Returns the nth child.
-    pub fn getChild(self: *const Self, nth: usize) ?*const ZNode {
+    /// Iterates this node's children.
+    pub fn nextChild(self: *const Self, iter: ?*const ZNode) ?*ZNode {
+        if (iter) |it| {
+            return it.sibling;
+        } else {
+            return self.child;
+        }
+    }
+
+    /// Returns the nth child's value. Or null if neither exist.
+    pub fn getChildValue(self: *const Self, nth: usize) ?Value {
         var count: usize = 0;
-        var iter: ?*const ZNode = self.child;
+        var iter: ?*ZNode = self.child;
+        while (iter) |n| {
+            if (count == nth) {
+                if (n.child) |c| {
+                    return c.value;
+                } else {
+                    return null;
+                }
+            }
+            count += 1;
+            iter = n.sibling;
+        }
+        return null;
+    }
+
+    /// Returns the nth child.
+    pub fn getChild(self: *const Self, nth: usize) ?*ZNode {
+        var count: usize = 0;
+        var iter: ?*ZNode = self.child;
         while (iter) |n| {
             if (count == nth) {
                 return n;
@@ -735,7 +762,7 @@ pub const ZNode = struct {
 
     pub fn getChildCount(self: *const Self) usize {
         var count: usize = 0;
-        var iter: ?*const ZNode = self.child;
+        var iter: ?*ZNode = self.child;
         while (iter) |n| {
             count += 1;
             iter = n.sibling;
@@ -746,8 +773,8 @@ pub const ZNode = struct {
     /// Finds the next child after the given iterator. This is good for when you can guess the order
     /// of the nodes, which can cut down on starting from the beginning. Passing null starts over
     /// from the beginning. Returns the found node or null (it will loop back around).
-    pub fn findNext(self: *const Self, start: ?*const ZNode, value: ZValue) ?*const ZNode {
-        var iter: ?*const ZNode = self.child;
+    pub fn findNext(self: *const Self, start: ?*const ZNode, value: ZValue) ?*ZNode {
+        var iter: ?*ZNode = self.child;
         if (start) |si| {
             iter = si.sibling;
         }
@@ -766,9 +793,9 @@ pub const ZNode = struct {
     }
 
     /// Finds the nth child node with a specific tag.
-    pub fn findNthAny(self: *const Self, nth: usize, tag: @TagType(ZValue)) ?*const ZNode {
+    pub fn findNthAny(self: *const Self, nth: usize, tag: @TagType(ZValue)) ?*ZNode {
         var count: usize = 0;
-        var iter: ?*const ZNode = self.child;
+        var iter: ?*ZNode = self.child;
         while (iter) |n| {
             if (n.value == tag) {
                 if (count == nth) {
@@ -782,9 +809,9 @@ pub const ZNode = struct {
     }
 
     /// Finds the nth child node with a specific value.
-    pub fn findNth(self: *const Self, nth: usize, value: ZValue) ?*const ZNode {
+    pub fn findNth(self: *const Self, nth: usize, value: ZValue) ?*ZNode {
         var count: usize = 0;
-        var iter: ?*const ZNode = self.child orelse return null;
+        var iter: ?*ZNode = self.child orelse return null;
         while (iter) |n| {
             if (n.value.equals(value)) {
                 if (count == nth) {
@@ -798,10 +825,10 @@ pub const ZNode = struct {
     }
 
     /// Traverses descendants until a node with the tag is found.
-    pub fn findNthAnyDescendant(self: *const Self, nth: usize, value: @TagType(ZValue)) ?*const ZNode {
+    pub fn findNthAnyDescendant(self: *const Self, nth: usize, value: @TagType(ZValue)) ?*ZNode {
         var depth: isize = 0;
         var count: usize = 0;
-        var iter: *const ZNode = self;
+        var iter: *ZNode = self;
         while (iter.nextUntil(self, &depth)) |n| : (iter = n) {
             if (n.value == tag) {
                 if (count == nth) {
@@ -814,10 +841,10 @@ pub const ZNode = struct {
     }
 
     /// Traverses descendants until a node with the specific value is found.
-    pub fn findNthDescendant(self: *const Self, nth: usize, value: ZValue) ?*const ZNode {
+    pub fn findNthDescendant(self: *const Self, nth: usize, value: ZValue) ?*ZNode {
         var depth: isize = 0;
         var count: usize = 0;
-        var iter: *const ZNode = self;
+        var iter: *ZNode = self;
         while (iter.nextUntil(self, &depth)) |n| : (iter = n) {
             if (n.value.equals(value)) {
                 if (count == nth) {
