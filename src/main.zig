@@ -1523,12 +1523,14 @@ pub fn ZFactory(comptime T: type) type {
 pub const FooInterface = struct {
     const Self = @This();
 
+    default: i32 = 100,
     fooFn: ?fn(*Self) void = null,
 
     // Should always have a deinit.
     deinitFn: fn(*const Self) void = undefined,
 
     pub fn foo(self: *Self) void {
+        std.debug.print("{}\n", .{self.default});
         return self.fooFn.?(self);
     }
     pub fn deinit(self: *const Self) void {
@@ -1583,5 +1585,6 @@ test "factory" {
     try factory.register(FooBar);
 
     const foobar = try factory.instantiate(testing.allocator, root);
+    foobar.foo();
     defer foobar.deinit();
 }
