@@ -1340,7 +1340,7 @@ pub fn imprint(self: *const ZNode, opts: ImprintOptions, onto_ptr: anytype) anye
                     err = true;
                 };
                 if (!err) { onto_ptr.* = t; }
-            } else if (@typeInfo(opt_info.child) != .Pointer) {
+            } else if (@typeInfo(opt_info.child) != .Pointer and @typeInfo(opt_info.child) != .Fn) {
                 var t = std.mem.zeroes(opt_info.child);
                 var err = false;
                 imprint(self, opts, &t) catch |e| {
@@ -1541,28 +1541,28 @@ pub const FooInterface = struct {
 pub const FooBar = struct {
     const Self = @This();
     const ZNAME = "Foo";
-    _allocator: *std.mem.Allocator = undefined,
-    _interface: FooInterface = .{},
+    allocator: *std.mem.Allocator = undefined,
+    interface: FooInterface = .{},
     bar: i32 = 0,
 
     pub fn zinit(allocator: *std.mem.Allocator, argz: *const ZNode) !*FooInterface {
         var self = try create(Self, allocator, argz, .{
-            ._allocator = allocator,
-            ._interface = .{
+            .allocator = allocator,
+            .interface = .{
                 .fooFn = foo,
                 .deinitFn = deinit,
             }
         });
-        return &self._interface;
+        return &self.interface;
     }
 
     pub fn deinit(interface: *const FooInterface) void {
-        const self = @fieldParentPtr(Self, "_interface", interface);
-        self._allocator.destroy(self);
+        const self = @fieldParentPtr(Self, "interface", interface);
+        self.allocator.destroy(self);
     }
 
     pub fn foo(interface: *FooInterface) void {
-        var self = @fieldParentPtr(FooBar, "_interface", interface);
+        var self = @fieldParentPtr(FooBar, "interface", interface);
         std.debug.print("{}\n", .{self.bar});
     }
 };
