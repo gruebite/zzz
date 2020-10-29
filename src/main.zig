@@ -1440,9 +1440,8 @@ pub fn imprint(self: *const ZNode, opts: ImprintOptions, onto_ptr: anytype) anye
     }
 }
 
-/// A useful factory of dynamic objects via zzz nodes. Register types and instantiate them with
-/// nodes. The type provided is an interface type that has field function pointers to be used
-/// with `@fieldParentPtr`
+/// A useful factory for creating structs. The type passed should be an interface. Register structs
+/// and have them be instantiated with a special initializer.
 pub fn ZFactory(comptime T: type) type {
     return struct {
         const Self = @This();
@@ -1467,9 +1466,7 @@ pub fn ZFactory(comptime T: type) type {
         }
 
         /// Registers an implementor of the interface. Requires ZNAME and a zinit
-        /// method:
-        ///
-        ///
+        /// method.
         pub fn register(self: *Self, comptime S: anytype) !void {
             const SI = @typeInfo(S);
             if (SI != .Struct) {
@@ -1487,9 +1484,9 @@ pub fn ZFactory(comptime T: type) type {
             try self.registered.put(S.ZNAME, ctor);
         }
 
-        /// Instantiates an object with ZNode. The node must have the first child node must be
-        /// "name" with the child value being the name of the registered struct. Sibling fields
-        /// are imprinted onto the struct.
+        /// Instantiates an object with ZNode. The ZNode's first child must have a string value of
+        /// "name" with the child node's value being the name of the registered struct. The node is
+        /// then passed to zinit.
         ///
         /// The caller is responsible for the memory.
         pub fn instantiate(self: *Self, allocator: *std.mem.Allocator, node: *const ZNode) !*T {
