@@ -1264,10 +1264,6 @@ pub const ImprintOptions = packed struct {
     ensure_value_exists: bool = false,
     /// Returns an error when a node's value is of the wrong type.
     ensure_correct_value_type: bool = true,
-    /// Enables number coersion.
-    coerce_numbers: bool = true,
-    /// Enabled coersion of ints to bools.
-    coerce_ints_to_bools: bool = false,
     /// Returns an error when a node couldn't be converted to an enum.
     ensure_enum_converted: bool = true,
     /// Returns an error when passed invalid types.
@@ -1290,7 +1286,8 @@ pub fn imprint(self: *const ZNode, opts: ImprintOptions, onto_ptr: anytype) anye
         @compileError("Passed node must be a pointer.");
     }
     const T = @typeInfo(@TypeOf(onto_ptr)).Pointer.child;
-    switch (@typeInfo(T)) {
+    const TI = @typeInfo(T);
+    switch (TI) {
         .Void => { },
         .Bool => {
             onto_ptr.* = switch (self.value) {
@@ -1300,15 +1297,25 @@ pub fn imprint(self: *const ZNode, opts: ImprintOptions, onto_ptr: anytype) anye
         },
         .Float, .ComptimeFloat => {
             onto_ptr.* = switch (self.value) {
-                .Float => |n| if (opts.coerce_numbers) @floatCast(T, n) else @floatCast(f32, n),
-                .Int => |n| if (opts.coerce_numbers) @intToFloat(T, n) else return error.ExpectedFloat,
+                .Float => |n| @floatCast(T, n),
+                .Int => |n| @intToFloat(T, n),
                 else => if (opts.ensure_correct_value_type) return error.ExpectedFloat else return,
             };
         },
         .Int, .ComptimeInt => {
+            const is_signed = (TI == .Int and TI.Int.is_signed) or (TI == .ComptimeInt and TI.CompTimeInt.is_signed);
             onto_ptr.* = switch (self.value) {
-                .Int => |n| if (opts.coerce_numbers) @intCast(T, n) else @intCast(i32, n),
-                .Bool => |n| if (opts.coerce_ints_to_bools) @boolToInt(n) else return error.ExpectedInt,
+                .Int => |n| blk: {
+                    if (is_signed) {
+                        break :blk @intCast(T, n);
+                    } else {
+                        // Sanity.
+                        if (n < 0) {
+                            @panic("attempted to convert negative number to unsigned.");
+                        }
+                        break :blk @intCast(T, n);
+                    }
+                },
                 else => if (opts.ensure_correct_value_type) return error.ExpectedInt else return,
             };
         },
