@@ -1311,7 +1311,7 @@ pub fn imprint(self: *const ZNode, opts: ImprintOptions, onto_ptr: anytype) anye
                     } else {
                         // Sanity.
                         if (n < 0) {
-                            @panic("attempted to convert negative number to unsigned.");
+                            return error.ExpectedUnsignedInt;
                         }
                         break :blk @intCast(T, n);
                     }
@@ -1479,11 +1479,11 @@ pub fn ZFactory(comptime T: type) type {
             if (SI != .Struct) {
                 @compileError("Expected struct got: " ++ @typeName(S));
             }
-            if (!@hasDecl(S, "ZNAME")) {
-                @compileError("Missing `ZNAME` on registered struct: " ++ @typeName(S));
-            }
             if (!@hasDecl(S, "zinit")) {
-                @compileError("Missing `zinit` on registered struct: " ++ @typeName(S));
+                @compileError("Missing `zinit` on registered struct, it could be private: " ++ @typeName(S));
+            }
+            if (!@hasDecl(S, "ZNAME")) {
+                @compileError("Missing `ZNAME` on registered struct, it could be private: " ++ @typeName(S));
             }
             const ctor = Ctor{
                 .func = S.zinit,
@@ -1519,7 +1519,7 @@ pub const FooInterface = struct {
     deinitFn: ?fn(*const Self) void = null,
 
     pub fn foo(self: *Self) void {
-        std.debug.print("{}\n", .{self.default});
+        //std.debug.print("{}\n", .{self.default});
         return self.fooFn.?(self);
     }
     pub fn deinit(self: *const Self) void {
@@ -1553,7 +1553,7 @@ pub const FooBar = struct {
 
     pub fn foo(interface: *FooInterface) void {
         var self = @fieldParentPtr(FooBar, "interface", interface);
-        std.debug.print("{}\n", .{self.bar});
+        //std.debug.print("{}\n", .{self.bar});
     }
 };
 
