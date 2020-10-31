@@ -1077,6 +1077,33 @@ pub fn ZTree(comptime R: usize, comptime S: usize) type {
             return node;
         }
 
+        pub fn copyNode(self: *Self, parent: ?*ZNode, node: *const ZNode) ZError!*ZNode {
+            var last_depth: isize = 1;
+            var depth: isize = 0;
+            var iter = node;
+            var piter: ?*ZNode = parent;
+            var plast: ?*ZNode = null;
+            var pfirst: ?*ZNode = null;
+            while (iter.next(&depth)) |child| : (iter = child) {
+                std.debug.print("{}: {}\n", .{child.value, depth});
+                if (depth > last_depth) {
+                    piter = plast;
+                    last_depth = depth;
+                } else if (depth < last_depth) {
+                    plast = piter;
+                    while (last_depth != depth) {
+                        piter = piter.?.parent;
+                        last_depth -= 1;
+                    }
+                }
+                plast = try self.addNode(piter, child.value);
+                if (pfirst == null) {
+                    pfirst = plast;
+                }
+            }
+            return pfirst.?;
+        }
+
         pub fn show(self: *const Self) void {
             for (self.rootSlice()) |rt, i| {
                 rt.show();
@@ -1282,9 +1309,6 @@ pub fn imprint(self: *const ZNode, opts: ImprintOptions, onto_ptr: anytype) anye
     if (@typeInfo(@TypeOf(onto_ptr)) != .Pointer) {
         @compileError("Passed struct must be a pointer.");
     }
-    if (@typeInfo(@TypeOf(self)) != .Pointer) {
-        @compileError("Passed node must be a pointer.");
-    }
     const T = @typeInfo(@TypeOf(onto_ptr)).Pointer.child;
     const TI = @typeInfo(T);
     switch (TI) {
@@ -1445,6 +1469,116 @@ pub fn imprint(self: *const ZNode, opts: ImprintOptions, onto_ptr: anytype) anye
         },
         else => if (opts.no_invalid_types) return error.InvalidType,
     }
+}
+
+pub const ExtractOptions = struct {
+    /// Error when there is an invalid type. Above we errored by default, but here we don't.
+    no_invalid_types: bool = false,
+};
+
+///
+pub fn extract(comptime R: usize, comptime N: usize, tree: *ZTree(R, N), root: ?*ZNode, opts: ExtractOptions, from_ptr: anytype) anyerror!void {
+    if (root == null) {
+        return extract(R, N, tree, try tree.addNode(null, .Null), opts, from_ptr);
+    }
+    if (@typeInfo(@TypeOf(from_ptr)) != .Pointer) {
+        @compileError("Passed struct must be a pointer.");
+    }
+    const T = @typeInfo(@TypeOf(from_ptr)).Pointer.child;
+    const TI = @typeInfo(T);
+    switch (TI) {
+        .Void => {
+            // No need.
+        },
+        .Bool => {
+            _ = try tree.addNode(root, .{.Bool = from_ptr.*});
+        },
+        .Float, .ComptimeFloat => {
+            _ = try tree.addNode(root, .{.Float = @floatCast(f32, from_ptr.*)});
+        },
+        .Int, .ComptimeInt => {
+            _ = try tree.addNode(root, .{.Int = @intCast(i32, from_ptr.*)});
+        },
+        .Enum => {
+            _ = try tree.addNode(root, .{.String = std.meta.tagName(from_ptr.*)});
+        },
+        .Optional => |opt_info| {
+            if (from_ptr.* != null) {
+                return extract(R, N, tree, root, opts, &from_ptr.*.?);
+            }
+        },
+        .Struct => |struct_info| {
+            var iter: ?*const ZNode = null;
+
+            inline for (struct_info.fields) |field, i| {
+                if (field.name[field.name.len - 1] == '_') {
+                    continue;
+                }
+                std.debug.print("here {}\n", .{field.name});
+                var field_node = try tree.addNode(root, .{.String = field.name});
+                try extract(R, N, tree, field_node, opts, &@field(from_ptr.*, field.name));
+            }
+        },
+        .Array => |array_info| {
+            // Arrays are weird. They work on siblings, not children.
+            std.debug.print("{}\n", .{array_info});
+            comptime var i: usize = 0;
+            inline while (i < array_info.len) : (i += 1) {
+                var null_node = try tree.addNode(root, .Null);
+                try extract(R, N, tree, null_node, opts, &from_ptr.*[i]);
+            }
+        },
+        // Only handle []const u8 and ZNode pointers.
+        .Pointer => |ptr_info| {
+            switch (ptr_info.size) {
+                .One => {
+                    if (ptr_info.child == ZNode) {
+                        _ = try tree.copyNode(root, from_ptr.*);
+                    } else if (opts.no_invalid_types) {
+                        return error.InvalidPointerType;
+                    }
+                },
+                .Slice => {
+                    if (ptr_info.child != u8) {
+                        if (opts.no_invalid_types) {
+                            return error.InvalidNonStringSlice;
+                        }
+                    } else {
+                        _ = try tree.addNode(root, .{.String = from_ptr.*});
+                    }
+                    return;
+                },
+                else => if (opts.no_invalid_types) return error.InvalidType,
+            }
+        },
+        else => if (opts.no_invalid_types) return error.InvalidType,
+    }
+}
+
+test "extract" {
+
+    var text_tree = ZTree(1, 100){};
+    var text_root = try text_tree.appendText("foo:bar:baz;;42");
+    text_root.show();
+
+    const FooNested = struct {
+        a_bool: bool = true,
+        a_int: i32 = 42,
+        a_float: f32 = 3.14,
+    };
+    const foo_struct = struct {
+        foo: ?i32 = null,
+        hi: []const u8 = "lol",
+        arr: [2]FooNested = [_]FooNested{.{}} ** 2,
+        a_node: *ZNode = undefined,
+    }{
+        .a_node = text_root,
+    };
+
+    var tree = ZTree(1, 100){};
+    try extract(1, 100, &tree, null, ExtractOptions{}, &foo_struct);
+    std.debug.print("\n", .{});
+    tree.show();
 }
 
 /// A useful factory for creating structs. The type passed should be an interface. Register structs
