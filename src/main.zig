@@ -1297,6 +1297,7 @@ pub const ImprintOptions = packed struct {
     no_invalid_types: bool = true,
 };
 
+// TODO: Removing anyerror causes infinite loop.
 /// Imprints a node into a type. The only types allowed are zzz types, structs, fixed arrays,
 /// optionals, and enums. This function performs no allocations and u8 slices refer to strings
 /// by reference. Enums can be mapped from string or int. There are a few options:
@@ -1304,7 +1305,6 @@ pub const ImprintOptions = packed struct {
 /// - `.NoCheck` perform no opts, if something can fit it'll fit.
 /// - `.CheckField`
 ///
-/// TODO: Removing anyerror causes infinite loop.
 pub fn imprint(self: *const ZNode, opts: ImprintOptions, onto_ptr: anytype) anyerror!void {
     if (@typeInfo(@TypeOf(onto_ptr)) != .Pointer) {
         @compileError("Passed struct must be a pointer.");

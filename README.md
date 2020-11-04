@@ -2,9 +2,9 @@
 
 Simple and boring human readable data format for Zig.
 
-zzz syntax describes a tree of strings. It has little syntactic noise and is really easy to implement. The spec does not force any specific rules for escaping or number parsing. The current implementation optionally uses Zig's standard library for number transformations. By default nodes are slices that point into the provided text. This is nice in languages that have native support for slices, like Zig and Rust.
+zzz syntax describes a tree of strings. It has little syntactic noise and is really easy to implement. The spec does not force any specific rules for escaping or number parsing, and the current implementation optionally uses Zig's standard library for converting numbers. Nodes in the tree are slices into the text.
 
-zzz's focus is to be a simple and lightweight format to describe trees of data. This library implements a static tree which has zero allocations. An example reading a tree:
+zzz's focus is to be a simple and lightweight format. This library implements a static tree which has zero allocations. Here's an example reading a tree:
 
 ```js
 // 1 is the max number of roots, 100 is the max number of nodes.
@@ -192,7 +192,7 @@ null -> "parent" -> "child"
                  -> "sibling"
 ```
 
-### This implementation allows for integers (i32), floats (f32), boolean, and nulls:
+### This implementation supports integers (i32), floats (f32), and booleans:
 ```
 string:42:42.0:true::
 ```
@@ -201,7 +201,7 @@ Output:
 null -> "string" -> 42 -> 42.0 -> true -> null
 ```
 
-### Strings are trimmed, they may still contain spaces:
+### Strings are trimmed:
 ```
 parent:     child:      grand child      ;
 ```
@@ -219,7 +219,7 @@ Output:
 null -> "parent" -> " child " -> "grand child]=]"
 ```
 
-### Lua strings will skip the first empty newline:
+### Lua strings will skip the first newline if it's empty:
 ```
 [[
 some text]]
@@ -229,7 +229,7 @@ Output:
 null -> "some text"
 ```
 
-### Strings are not escaped and taken "as-is".
+### Strings are not escaped and taken as-is.
 ```
 "\n\t\r"
 ```
