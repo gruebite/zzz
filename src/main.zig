@@ -668,7 +668,8 @@ pub const ZNode = struct {
     child: ?*ZNode = null,
 
     /// Returns the next Node in the tree. Will return Null after reaching root. For nodes further
-    /// down the tree, they will bubble up, resulting in a negative depth.
+    /// down the tree, they will bubble up, resulting in a negative depth. Self is considered to be
+    /// at depth 0.
     pub fn next(self: *const Self, depth: *isize) ?*ZNode {
         if (self.child) |c| {
             depth.* += 1;
@@ -719,7 +720,7 @@ pub const ZNode = struct {
         }
     }
 
-    /// Iterates this node's children.
+    /// Iterates this node's children. Pass null to start. `iter = node.nextChild(iter);`
     pub fn nextChild(self: *const Self, iter: ?*const ZNode) ?*ZNode {
         if (iter) |it| {
             return it.sibling;
@@ -728,7 +729,7 @@ pub const ZNode = struct {
         }
     }
 
-    /// Returns the nth child's value. Or null if neither exist.
+    /// Returns the nth child's value. Or null if neither the node or child exist.
     pub fn getChildValue(self: *const Self, nth: usize) ?Value {
         var count: usize = 0;
         var iter: ?*ZNode = self.child;
@@ -746,7 +747,7 @@ pub const ZNode = struct {
         return null;
     }
 
-    /// Returns the nth child.
+    /// Returns the nth child. O(n)
     pub fn getChild(self: *const Self, nth: usize) ?*ZNode {
         var count: usize = 0;
         var iter: ?*ZNode = self.child;
@@ -760,6 +761,7 @@ pub const ZNode = struct {
         return null;
     }
 
+    /// Returns the number of children. O(n)
     pub fn getChildCount(self: *const Self) usize {
         var count: usize = 0;
         var iter: ?*ZNode = self.child;
@@ -856,7 +858,7 @@ pub const ZNode = struct {
         return null;
     }
 
-    /// Iteratively transforms node values. Can pass a context, like an allocator. This can be used
+    /// Iteratively transforms node values. Can pass a context, like an allocator. This can be used to
     /// free resources too.
     pub fn transform(self: *Self, comptime C: type, context: C, transformer: fn(C, ZValue, isize) anyerror!ZValue) anyerror!void {
         var depth: isize = 0;
@@ -901,6 +903,7 @@ pub const ZNode = struct {
         }
     }
 
+    /// Returns true if node has more than one descendant (child, grandchild, etc).
     fn _moreThanOneDescendant(self: *const Self) bool {
         var depth: isize = 0;
         var count: usize = 0;
@@ -956,10 +959,10 @@ pub const ZNode = struct {
         }
     }
 
-    /// Outputs a `ZNode` and its children on multiple lines.
+    /// Outputs a `ZNode`s children on multiple lines. Excludes this node as root.
     /// Arrays with children that have:
     /// - null elements, separate lines
-    /// - non-null same line
+    /// - non-null, same line
     pub fn stringifyPretty(self: *const Self, out_stream: anytype) @TypeOf(out_stream).Error!void {
         // Assume root, so don't print this node.
         var iter: ?*const ZNode = self.child;
@@ -970,6 +973,7 @@ pub const ZNode = struct {
         }
     }
 
+    /// Debug print the node.
     pub fn show(self: *const Self) void {
         std.debug.print("{}\n", .{self.value});
         var depth: isize = 0;
@@ -1077,6 +1081,8 @@ pub fn ZTree(comptime R: usize, comptime S: usize) type {
             return node;
         }
 
+        /// Recursively copies a node from another part of the tree onto a new parent. Strings will
+        /// be by reference.
         pub fn copyNode(self: *Self, parent: ?*ZNode, node: *const ZNode) ZError!*ZNode {
             var last_depth: isize = 1;
             var depth: isize = 0;
@@ -1104,6 +1110,7 @@ pub fn ZTree(comptime R: usize, comptime S: usize) type {
             return pfirst.?;
         }
 
+        /// Debug print the tree and all of its roots.
         pub fn show(self: *const Self) void {
             for (self.rootSlice()) |rt, i| {
                 rt.show();
@@ -1293,8 +1300,9 @@ pub const ImprintOptions = struct {
     ensure_correct_value_type: bool = true,
     /// Returns an error when a node couldn't be converted to an enum.
     ensure_enum_converted: bool = true,
-    /// Returns an error when passed invalid types.
-    no_invalid_types: bool = true,
+    /// Returns an error when passed invalid types, instead of skipping. Current invalid types:
+    /// Undefined, Null, ErrorUnion, ErrorSet, Union, Fn, BoundFn, Opaque, Frame, AnyFrame, Vector
+    no_invalid_types: bool = false,
     /// Allocate strings when adding them to the struct.
     allocate_strings: bool = false,
     allocator: ?*std.mem.Allocator = null,
@@ -1303,11 +1311,7 @@ pub const ImprintOptions = struct {
 // TODO: Removing anyerror causes infinite loop.
 /// Imprints a node into a type. The only types allowed are zzz types, structs, fixed arrays,
 /// optionals, and enums. This function performs no allocations and u8 slices refer to strings
-/// by reference. Enums can be mapped from string or int. There are a few options:
-///
-/// - `.NoCheck` perform no opts, if something can fit it'll fit.
-/// - `.CheckField`
-///
+/// by reference. Enums can be mapped from string or int.
 pub fn imprint(self: *const ZNode, opts: ImprintOptions, onto_ptr: anytype) anyerror!void {
     if (@typeInfo(@TypeOf(onto_ptr)) != .Pointer) {
         @compileError("Passed struct must be a pointer.");
@@ -1480,11 +1484,11 @@ pub fn imprint(self: *const ZNode, opts: ImprintOptions, onto_ptr: anytype) anye
 }
 
 pub const ExtractOptions = struct {
-    /// Error when there is an invalid type. Above we errored by default, but here we don't.
+    /// Error when there is an invalid type, instead of skipping. See ImprintOptions for list.
     no_invalid_types: bool = false,
 };
 
-///
+/// Extract a struct's values onto a tree with a new root.
 pub fn extract(comptime R: usize, comptime N: usize, tree: *ZTree(R, N), root: ?*ZNode, opts: ExtractOptions, from_ptr: anytype) anyerror!void {
     if (root == null) {
         return extract(R, N, tree, try tree.addNode(null, .Null), opts, from_ptr);
@@ -1589,8 +1593,10 @@ test "extract" {
     tree.show();
 }
 
-/// A useful factory for creating structs. The type passed should be an interface. Register structs
-/// and have them be instantiated with a special initializer.
+/// A minimal factory for creating structs. The type passed should be an interface. Register structs
+/// with special declarations and instantiate them with ZNodes. Required declarations:
+/// - ZNAME: []const u8 // name of the struct referenced in zzz
+/// - zinit: fn(allocator: *std.mem.Allocator, argz: *const ZNode) anyerror!*T // constructor called
 pub fn ZFactory(comptime T: type) type {
     return struct {
         const Self = @This();
@@ -1650,7 +1656,7 @@ pub fn ZFactory(comptime T: type) type {
     };
 }
 
-pub const FooInterface = struct {
+const FooInterface = struct {
     const Self = @This();
 
     allocator: ?*std.mem.Allocator = null,
@@ -1669,7 +1675,7 @@ pub const FooInterface = struct {
     }
 };
 
-pub const FooBar = struct {
+const FooBar = struct {
     const Self = @This();
     const ZNAME = "Foo";
     interface: FooInterface = .{},
