@@ -568,7 +568,7 @@ pub const ZValue = union(enum) {
         return false;
     }
 
-    /// Outputs a value to the `out_stream`. This output is a parsable.
+    /// Outputs a value to the `out_stream`. This output is parsable.
     pub fn stringify(self: Self, out_stream: anytype) @TypeOf(out_stream).Error!void {
         switch (self) {
             .Null => {
@@ -1284,7 +1284,7 @@ test "parsing into nodes" {
 }
 
 /// Options that can be enabled when calling `imprint` onto a struct.
-pub const ImprintOptions = packed struct {
+pub const ImprintOptions = struct {
     /// Return an error when a struct field is missing from the node tree.
     ensure_node_exists: bool = false,
     /// Returns an error when a field's node exists, but the value doesn't.
@@ -1295,6 +1295,9 @@ pub const ImprintOptions = packed struct {
     ensure_enum_converted: bool = true,
     /// Returns an error when passed invalid types.
     no_invalid_types: bool = true,
+    /// Allocate strings when adding them to the struct.
+    allocate_strings: bool = false,
+    allocator: ?*std.mem.Allocator = null,
 };
 
 // TODO: Removing anyerror causes infinite loop.
@@ -1457,7 +1460,12 @@ pub fn imprint(self: *const ZNode, opts: ImprintOptions, onto_ptr: anytype) anye
                                     return error.InvalidNonStringSlice;
                                 }
                             } else {
-                                onto_ptr.* = self.value.String;
+                                if (opts.allocate_strings) {
+                                    const a = try std.mem.dupe(opts.allocator.?, u8, self.value.String);
+                                    onto_ptr.* = a;
+                                } else {
+                                    onto_ptr.* = self.value.String;
+                                }
                             }
                         },
                         else => if (opts.ensure_correct_value_type) return error.ExpectedStringNode,
