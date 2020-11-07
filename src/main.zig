@@ -830,7 +830,7 @@ pub const ZNode = struct {
     pub fn findNthAnyDescendant(self: *const Self, nth: usize, value: @TagType(ZValue)) ?*ZNode {
         var depth: isize = 0;
         var count: usize = 0;
-        var iter: *ZNode = self;
+        var iter: *const ZNode = self;
         while (iter.nextUntil(self, &depth)) |n| : (iter = n) {
             if (n.value == tag) {
                 if (count == nth) {
@@ -846,7 +846,7 @@ pub const ZNode = struct {
     pub fn findNthDescendant(self: *const Self, nth: usize, value: ZValue) ?*ZNode {
         var depth: isize = 0;
         var count: usize = 0;
-        var iter: *ZNode = self;
+        var iter: *const ZNode = self;
         while (iter.nextUntil(self, &depth)) |n| : (iter = n) {
             if (n.value.equals(value)) {
                 if (count == nth) {
@@ -860,7 +860,7 @@ pub const ZNode = struct {
 
     /// Iteratively transforms node values. Can pass a context, like an allocator. This can be used to
     /// free resources too.
-    pub fn transform(self: *Self, comptime C: type, context: C, transformer: fn(C, ZValue, isize) anyerror!ZValue) anyerror!void {
+    pub fn transform(self: *const Self, comptime C: type, context: C, transformer: fn(C, ZValue, isize) anyerror!ZValue) anyerror!void {
         var depth: isize = 0;
         var iter: *const ZNode = self;
         while (iter.nextUntil(self, &depth)) |c| : (iter = c) {
@@ -869,7 +869,7 @@ pub const ZNode = struct {
     }
 
     /// Iteratively traverses the tree, passing the node.
-    pub fn traverse(self: *Self, comptime C: type, context: C, traverser: fn(C, *ZNode, isize) anyerror!void) anyerror!void {
+    pub fn traverse(self: *const Self, comptime C: type, context: C, traverser: fn(C, *ZNode, isize) anyerror!void) anyerror!void {
         var depth: isize = 0;
         var iter: *const ZNode = self;
         while (iter.nextUntil(self, &depth)) |c| : (iter = c) {
