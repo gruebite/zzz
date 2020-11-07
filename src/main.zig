@@ -211,7 +211,7 @@ pub const StreamingParser = struct {
                         defer self.state = .Comment;
                         if (self.state == .OpenCharacter) {
                             return ZNodeToken{
-                                .depth = self.line_depth + self.node_depth,
+                                .depth = self.line_depth + self.node_depth + 1,
                                 .start = self.start_index,
                                 .end = self.current_index - self.trailing_spaces,
                             };
@@ -237,7 +237,7 @@ pub const StreamingParser = struct {
                 ':' => {
                     defer self.state = .ExpectZNode;
                     const node = ZNodeToken{
-                        .depth = self.line_depth + self.node_depth,
+                        .depth = self.line_depth + self.node_depth + 1,
                         .start = self.start_index,
                         .end = self.current_index - self.trailing_spaces,
                     };
@@ -251,7 +251,7 @@ pub const StreamingParser = struct {
                 ',' => {
                     defer self.state = .ExpectZNode;
                     const node = ZNodeToken{
-                        .depth = self.line_depth + self.node_depth,
+                        .depth = self.line_depth + self.node_depth + 1,
                         .start = self.start_index,
                         .end = self.current_index - self.trailing_spaces,
                     };
@@ -267,7 +267,7 @@ pub const StreamingParser = struct {
                     }
                     defer self.state = .ExpectZNode;
                     const node = ZNodeToken{
-                        .depth = self.line_depth + self.node_depth,
+                        .depth = self.line_depth + self.node_depth + 1,
                         .start = self.start_index,
                         .end = self.current_index - self.trailing_spaces,
                     };
@@ -305,7 +305,7 @@ pub const StreamingParser = struct {
                 '\n' => {
                     defer self.state = .OpenLine;
                     const node = ZNodeToken{
-                        .depth = self.line_depth + self.node_depth,
+                        .depth = self.line_depth + self.node_depth + 1,
                         .start = self.start_index,
                         .end = self.current_index - self.trailing_spaces,
                     };
@@ -351,7 +351,7 @@ pub const StreamingParser = struct {
                 '"' => {
                     self.state = .EndString;
                     const node = ZNodeToken{
-                        .depth = self.line_depth + self.node_depth,
+                        .depth = self.line_depth + self.node_depth + 1,
                         .start = self.start_index,
                         .end = self.current_index,
                     };
@@ -367,7 +367,7 @@ pub const StreamingParser = struct {
                 '"' => {
                     self.state = .EndString;
                     const node = ZNodeToken{
-                        .depth = self.line_depth + self.node_depth,
+                        .depth = self.line_depth + self.node_depth + 1,
                         .start = self.start_index,
                         .end = self.current_index,
                     };
@@ -425,7 +425,7 @@ pub const StreamingParser = struct {
                     if (self.close_string_level == self.open_string_level) {
                         self.state = .EndString;
                         return ZNodeToken{
-                            .depth = self.line_depth + self.node_depth,
+                            .depth = self.line_depth + self.node_depth + 1,
                             .start = self.start_index,
                             .end = self.current_index - self.open_string_level - 1,
                         };
@@ -512,18 +512,18 @@ test "parsing depths" {
     var idx: usize = 0;
     var stream = StreamingParser.init();
 
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 0);
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 1);
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 0);
     testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 1);
     testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 2);
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 3);
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 3);
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 2);
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 3);
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 3);
     testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 1);
     testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 2);
+    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 3);
+    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 4);
+    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 4);
+    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 3);
+    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 4);
+    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 4);
+    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 2);
+    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 3);
 }
 
 /// Parses the stream, outputting ZNodeTokens which reference the text.
@@ -1008,8 +1008,7 @@ pub fn ZTree(comptime R: usize, comptime S: usize) type {
             while (try parseStream(&stream, &idx, text)) |token| {
                 const slice = text[token.start..token.end];
                 const value: ZValue = if (slice.len == 0) .Null else .{.String = slice};
-                // Math works better with depth starting at one.
-                const new_depth = token.depth + 1;
+                const new_depth = token.depth;
                 if (new_depth <= current_depth) {
                     // Ascend.
                     while (current_depth > new_depth) {
