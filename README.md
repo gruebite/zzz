@@ -117,7 +117,7 @@ For more examples see the source comments and tests.
 # Planned features
 
 - Add support for embedded binary with `[====#<len><len bytes...>` syntax, where the number of equal signs denote the number of bytes of the length.
-- Add nested lua strings, so `[[ [[]] ]]` would be a valid string, instead of being interpetted as `[[ [[]]` and `]]`.
+- Add nested lua strings, so `[[ [[]] ]]` would be a valid string, instead of being interpeted as `[[ [[]]` and `]]`.
 
 # Sparse spec
 
