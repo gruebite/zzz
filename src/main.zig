@@ -936,10 +936,7 @@ pub const ZNode = struct {
                     try out_stream.writeAll(" ");
                 } else if (n.parent.?._moreThanOneDescendant()) {
                     try out_stream.writeAll("\n");
-                    var i: isize = 0;
-                    while (i < depth) : (i += 1) {
-                        std.debug.print("  ", .{});
-                    }
+                    try out_stream.writeByteNTimes(' ', 2 * @bitCast(usize, depth));
                 } else {
                     try out_stream.writeAll(" ");
                 }
@@ -948,10 +945,7 @@ pub const ZNode = struct {
                     last_depth -= 1;
                 }
                 try out_stream.writeAll("\n");
-                var i: isize = 0;
-                while (i < depth) : (i += 1) {
-                    std.debug.print("  ", .{});
-                }
+                try out_stream.writeByteNTimes(' ', 2 * @bitCast(usize, depth));
             } else if (depth > 1) {
                 try out_stream.writeAll(",");
             }
