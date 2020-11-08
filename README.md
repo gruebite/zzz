@@ -114,6 +114,11 @@ For more examples see the source comments and tests.
 
 - **Rust**: https://github.com/MouseProducedGames/ruzzzt
 
+# Planned features
+
+- Add support for embedded binary with `[====#<len><len bytes...>` syntax, where the number of equal signs denote the number of bytes of the length.
+- Add nested lua strings, so `[[ [[]] ]]` would be a valid string, instead of being interpetted as `[[ [[]]` and `]]`.
+
 # Sparse spec
 
 zzz text describes a tree of strings. Special characters (and spaces) are used to go up and down the tree. The tree has an implicit null root node.
