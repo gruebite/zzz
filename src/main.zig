@@ -94,9 +94,7 @@ const std = @import("std");
 /// The only output of the tokenizer.
 pub const ZNodeToken = struct {
     const Self = @This();
-    /// 0 is top level children.
-    /// TODO: This is different from other interfaces which take an isize, and start from 1, 0
-    /// being root.
+    /// 0 is root, 1 is top level children.
     depth: usize,
     /// The extent of the slice.
     start: usize,
