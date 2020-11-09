@@ -629,27 +629,6 @@ pub const ZValue = union(enum) {
     }
 };
 
-/// Transformer function. Level is tree depth, so top depth nodes have a depth of 1.
-pub fn defaultTransformer(context: void, value: ZValue, depth: isize) anyerror!ZValue {
-    if (value != .String) {
-        return value;
-    }
-    // Try to cast to numbers, then true/false checks, then string.
-    const slice = value.String;
-    const integer = std.fmt.parseInt(i32, slice, 10) catch |_| {
-        const float = std.fmt.parseFloat(f32, slice) catch |_| {
-            if (std.mem.eql(u8, "true", slice)) {
-                return ZValue{.Bool = true};
-            } else if (std.mem.eql(u8, "false", slice)) {
-                return ZValue{.Bool = false};
-            }
-            return value;
-        };
-        return ZValue{.Float = float};
-    };
-    return ZValue{.Int = integer};
-}
-
 /// ZTree errors.
 pub const ZError = error {
     TreeFull,
@@ -856,22 +835,32 @@ pub const ZNode = struct {
         return null;
     }
 
-    /// Iteratively transforms node values. Can pass a context, like an allocator. This can be used to
-    /// free resources too.
-    pub fn transform(self: *const Self, comptime C: type, context: C, transformer: fn(C, ZValue, isize) anyerror!ZValue) anyerror!void {
+    /// Converts strings to specific types. This just tries converting the string to an int, then
+    /// float, then bool. Booleans are only the string values "true" or "false".
+    pub fn convertStrings(self: *const Self) void {
         var depth: isize = 0;
         var iter: *const ZNode = self;
         while (iter.nextUntil(self, &depth)) |c| : (iter = c) {
-            c.value = try transformer(context, c.value, depth);
-        }
-    }
-
-    /// Iteratively traverses the tree, passing the node.
-    pub fn traverse(self: *const Self, comptime C: type, context: C, traverser: fn(C, *ZNode, isize) anyerror!void) anyerror!void {
-        var depth: isize = 0;
-        var iter: *const ZNode = self;
-        while (iter.nextUntil(self, &depth)) |c| : (iter = c) {
-            try traverser(context, c, depth);
+            if (c.value != .String) {
+                continue;
+            }
+            // Try to cast to numbers, then true/false checks, then string.
+            const slice = c.value.String;
+            const integer = std.fmt.parseInt(i32, slice, 10) catch |_| {
+                const float = std.fmt.parseFloat(f32, slice) catch |_| {
+                    if (std.mem.eql(u8, "true", slice)) {
+                        c.value = ZValue{.Bool = true};
+                    } else if (std.mem.eql(u8, "false", slice)) {
+                        c.value = ZValue{.Bool = false};
+                    } else {
+                        // Keep the value.
+                    }
+                    continue;
+                };
+                c.value = ZValue{.Float = float};
+                continue;
+            };
+            c.value = ZValue{.Int = integer};
         }
     }
 
@@ -1125,7 +1114,7 @@ test "static tree" {
 
     var tree = ZTree(1, 100){};
     const node = try tree.appendText(text);
-    try node.transform(void, {}, defaultTransformer);
+    node.convertStrings();
 
     var iter = node.findNext(null, .{.String = "max_particles"});
     testing.expect(iter != null);
@@ -1173,7 +1162,7 @@ test "node conforming imprint" {
     ;
     var tree = ZTree(1, 100){};
     var node = try tree.appendText(text);
-    try node.transform(void, {}, defaultTransformer);
+    node.convertStrings();
 
     var example = ConformingStruct{};
     try imprint(node, ImprintOptions{
@@ -1209,7 +1198,7 @@ test "node nonconforming imprint" {
     ;
     var tree = ZTree(1, 100){};
     var node = try tree.appendText(text);
-    try node.transform(void, {}, defaultTransformer);
+    node.convertStrings();
 
     var example = NonConformingStruct{};
     try imprint(node, ImprintOptions{.ensure_correct_value_type = false}, &example);
@@ -1703,7 +1692,7 @@ test "factory" {
 
     var tree = ZTree(1, 100){};
     var root = try tree.appendText(text);
-    try root.transform(void, {}, defaultTransformer);
+    root.convertStrings();
 
     var factory = ZFactory(FooInterface).init(testing.allocator);
     defer factory.deinit();

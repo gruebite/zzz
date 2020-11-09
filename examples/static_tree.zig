@@ -11,8 +11,8 @@ pub fn main() !void {
     // Append the text to the tree. This creates a new root.
     const node = try tree.appendText(kobold);
     std.debug.print("Roots: {}\n", .{tree.rootSlice().len});
-    // Apply the default transformer which converts any nodes to floats, integers, or bools.
-    try node.transform(void, {}, zzz.defaultTransformer);
+    // Convert strings to integer, floating, or boolean types.
+    node.convertStrings();
     // Debug print.
     tree.show();
 
@@ -23,7 +23,7 @@ pub fn main() !void {
     // The JSON example has exactly 161 nodes.
     var big_tree = zzz.ZTree(1, 161){};
     const root = try big_tree.appendText(json_example);
-    try root.transform(void, {}, zzz.defaultTransformer);
+    root.convertStrings();
     big_tree.show();
 
     // Find all servlet names.

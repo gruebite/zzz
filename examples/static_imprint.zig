@@ -39,8 +39,8 @@ pub fn main() !void {
     var tree = zzz.ZTree(1, 35){};
     // Append the text to the tree. This creates a new root.
     var node = try tree.appendText(dragon);
-    // Apply the default transformer which converts any nodes to floats, integers, or bools.
-    try node.transform(void, {}, zzz.defaultTransformer);
+    // Convert strings to integer, floating, or boolean types.
+    node.convertStrings();
     // Debug print.
     tree.show();
 
