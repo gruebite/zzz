@@ -1382,14 +1382,8 @@ pub fn imprint(self: *const ZNode, opts: ImprintOptions, onto_ptr: anytype) anye
             } else {
                 // TODO: This is okay because we error on value not existing.
                 var t: opt_info.child = undefined;
-                var err = false;
-                imprint(self, opts, &t) catch |e| {
-                    // Missing check.
-                    err = true;
-                };
-                if (!err) {
-                    onto_ptr.* = t;
-                }
+                try imprint(self, opts, &t);
+                onto_ptr.* = t;
             }
         },
         .Struct => |struct_info| {
