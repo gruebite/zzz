@@ -110,14 +110,13 @@ For more examples see the source comments and tests.
 
 `zig build examples`
 
-## Other languages
+# Other languages
 
 - **Rust**: https://github.com/MouseProducedGames/ruzzzt
 
-# Planned features
+# Syntax highlighting
 
-- Add support for embedded binary with `[====#<len><len bytes...>` syntax, where the number of equal signs denote the number of bytes of the length.
-- Add nested lua strings, so `[[ [[]] ]]` would be a valid string, instead of being interpeted as `[[ [[]]` and `]]`.
+- **kak**: https://github.com/katesuyu/zzz.kak
 
 # Sparse spec
 
