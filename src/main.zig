@@ -121,7 +121,7 @@ pub const StreamingParser = struct {
     /// Account for any extra spaces trailing at the end of a word.
     trailing_spaces: usize,
 
-    pub const Error = error {
+    pub const Error = error{
         TooMuchIndentation,
         InvalidWhitespace,
         OddIndentationValue,
@@ -198,7 +198,7 @@ pub const StreamingParser = struct {
                 },
                 else => {
                     // Skip.
-                }
+                },
             },
             // All basically act the same except for a few minor differences.
             .ExpectZNode, .OpenLine, .EndString, .OpenCharacter => switch (c) {
@@ -333,7 +333,7 @@ pub const StreamingParser = struct {
                     }
                     self.trailing_spaces = 0;
                     self.state = .OpenCharacter;
-                }
+                },
             },
             .Indent => switch (c) {
                 ' ' => {
@@ -343,7 +343,7 @@ pub const StreamingParser = struct {
                 },
                 else => {
                     return Error.OddIndentationValue;
-                }
+                },
             },
             .Quotation => switch (c) {
                 '"' => {
@@ -359,7 +359,7 @@ pub const StreamingParser = struct {
                 },
                 else => {
                     self.state = .SingleLineCharacter;
-                }
+                },
             },
             .SingleLineCharacter => switch (c) {
                 '"' => {
@@ -378,7 +378,7 @@ pub const StreamingParser = struct {
                 },
                 else => {
                     // Consume.
-                }
+                },
             },
             .MultilineOpen0, .MultilineLevelOpen => switch (c) {
                 '=' => {
@@ -391,7 +391,7 @@ pub const StreamingParser = struct {
                 },
                 else => {
                     return Error.InvalidMultilineOpen;
-                }
+                },
             },
             .MultilineOpen1 => switch (c) {
                 ']' => {
@@ -403,7 +403,7 @@ pub const StreamingParser = struct {
                 },
                 else => {
                     self.state = .MultilineCharacter;
-                }
+                },
             },
             .MultilineCharacter => switch (c) {
                 ']' => {
@@ -412,7 +412,7 @@ pub const StreamingParser = struct {
                 },
                 else => {
                     // Capture EVERYTHING.
-                }
+                },
             },
             .MultilineClose0, .MultilineLevelClose => switch (c) {
                 '=' => {
@@ -432,8 +432,8 @@ pub const StreamingParser = struct {
                 },
                 else => {
                     return Error.InvalidMultilineClose;
-                }
-            }
+                },
+            },
         }
         return null;
     }
@@ -613,7 +613,7 @@ pub const ZValue = union(enum) {
             },
             .Bool => {
                 return out_stream.writeAll(if (self.Bool) "true" else "false");
-            }
+            },
         }
     }
 
@@ -630,7 +630,7 @@ pub const ZValue = union(enum) {
 };
 
 /// ZTree errors.
-pub const ZError = error {
+pub const ZError = error{
     TreeFull,
     TooManyRoots,
 };
@@ -672,11 +672,15 @@ pub const ZNode = struct {
     /// Returns the next node in the tree until reaching root or the stopper node.
     pub fn nextUntil(self: *const Self, stopper: *const ZNode, depth: *isize) ?*ZNode {
         if (self.child) |c| {
-            if (c == stopper) { return null; }
+            if (c == stopper) {
+                return null;
+            }
             depth.* += 1;
             return c;
         } else if (self.sibling) |c| {
-            if (c == stopper) { return null; }
+            if (c == stopper) {
+                return null;
+            }
             return c;
         } else {
             // Go up and forward.
@@ -684,11 +688,15 @@ pub const ZNode = struct {
             while (iter != null) {
                 iter = iter.?.parent;
                 // All these checks. :/
-                if (iter == stopper) { return null; }
+                if (iter == stopper) {
+                    return null;
+                }
                 if (iter != null) {
                     depth.* -= 1;
                     if (iter.?.sibling) |c| {
-                        if (c == stopper) { return null; }
+                        if (c == stopper) {
+                            return null;
+                        }
                         return c;
                     }
                 }
@@ -849,18 +857,18 @@ pub const ZNode = struct {
             const integer = std.fmt.parseInt(i32, slice, 10) catch |_| {
                 const float = std.fmt.parseFloat(f32, slice) catch |_| {
                     if (std.mem.eql(u8, "true", slice)) {
-                        c.value = ZValue{.Bool = true};
+                        c.value = ZValue{ .Bool = true };
                     } else if (std.mem.eql(u8, "false", slice)) {
-                        c.value = ZValue{.Bool = false};
+                        c.value = ZValue{ .Bool = false };
                     } else {
                         // Keep the value.
                     }
                     continue;
                 };
-                c.value = ZValue{.Float = float};
+                c.value = ZValue{ .Float = float };
                 continue;
             };
-            c.value = ZValue{.Int = integer};
+            c.value = ZValue{ .Int = integer };
         }
     }
 
@@ -905,7 +913,6 @@ pub const ZNode = struct {
     }
 
     fn _stringifyPretty(self: *const Self, out_stream: anytype) @TypeOf(out_stream).Error!void {
-        //
         try self.value.stringify(out_stream);
         try out_stream.writeAll(":");
         if (self.getChildCount() > 1) {
@@ -988,7 +995,7 @@ pub fn ZTree(comptime R: usize, comptime S: usize) type {
             var idx: usize = 0;
             while (try parseStream(&stream, &idx, text)) |token| {
                 const slice = text[token.start..token.end];
-                const value: ZValue = if (slice.len == 0) .Null else .{.String = slice};
+                const value: ZValue = if (slice.len == 0) .Null else .{ .String = slice };
                 const new_depth = token.depth;
                 if (new_depth <= current_depth) {
                     // Ascend.
@@ -1052,7 +1059,7 @@ pub fn ZTree(comptime R: usize, comptime S: usize) type {
             if (parent) |p| {
                 if (p.child) |child| {
                     var iter = child;
-                    while (iter.sibling) |sib| : (iter = sib) { }
+                    while (iter.sibling) |sib| : (iter = sib) {}
                     iter.sibling = node;
                 } else {
                     p.child = node;
@@ -1071,7 +1078,7 @@ pub fn ZTree(comptime R: usize, comptime S: usize) type {
             var plast: ?*ZNode = null;
             var pfirst: ?*ZNode = null;
             while (iter.next(&depth)) |child| : (iter = child) {
-                std.debug.print("{}: {}\n", .{child.value, depth});
+                std.debug.print("{}: {}\n", .{ child.value, depth });
                 if (depth > last_depth) {
                     piter = plast;
                     last_depth = depth;
@@ -1116,15 +1123,15 @@ test "static tree" {
     const node = try tree.appendText(text);
     node.convertStrings();
 
-    var iter = node.findNext(null, .{.String = "max_particles"});
+    var iter = node.findNext(null, .{ .String = "max_particles" });
     testing.expect(iter != null);
-    iter = node.findNext(iter, .{.String = "texture"});
+    iter = node.findNext(iter, .{ .String = "texture" });
     testing.expect(iter != null);
-    iter = node.findNext(iter, .{.String = "max_particles"});
+    iter = node.findNext(iter, .{ .String = "max_particles" });
     testing.expect(iter != null);
-    iter = node.findNext(iter, .{.String = "systems"});
+    iter = node.findNext(iter, .{ .String = "systems" });
     testing.expect(iter != null);
-    iter = node.findNext(iter, .{.Int = 42});
+    iter = node.findNext(iter, .{ .Int = 42 });
     testing.expect(iter == null);
 }
 
@@ -1166,7 +1173,8 @@ test "node conforming imprint" {
 
     var example = ConformingStruct{};
     try imprint(node, ImprintOptions{
-        .ensure_node_exists = true, .ensure_value_exists = true,
+        .ensure_node_exists = true,
+        .ensure_value_exists = true,
         .ensure_correct_value_type = true,
     }, &example);
     testing.expectEqual(@as(i32, 100), example.max_particles.?);
@@ -1201,51 +1209,50 @@ test "node nonconforming imprint" {
     node.convertStrings();
 
     var example = NonConformingStruct{};
-    try imprint(node, ImprintOptions{.ensure_correct_value_type = false}, &example);
-    testing.expectError(error.NodeDoesNotExist, imprint(node, ImprintOptions{.ensure_node_exists = true, .ensure_correct_value_type = false}, &example));
+    try imprint(node, ImprintOptions{ .ensure_correct_value_type = false }, &example);
+    testing.expectError(error.NodeDoesNotExist, imprint(node, ImprintOptions{ .ensure_node_exists = true, .ensure_correct_value_type = false }, &example));
 }
 
 test "node appending and searching" {
     const testing = std.testing;
 
-
     var tree = ZTree(1, 100){};
     var root = try tree.addNode(null, .Null);
 
     var nullChild = try tree.addNode(root, .Null);
-    var stringChild = try tree.addNode(root, .{.String = "Hello"});
-    var fooChild = try tree.addNode(root, .{.String = "foo"});
-    var integerChild = try tree.addNode(root, .{.Int = 42});
-    var floatChild = try tree.addNode(root, .{.Float = 3.14});
-    var boolChild = try tree.addNode(root, .{.Bool = true});
+    var stringChild = try tree.addNode(root, .{ .String = "Hello" });
+    var fooChild = try tree.addNode(root, .{ .String = "foo" });
+    var integerChild = try tree.addNode(root, .{ .Int = 42 });
+    var floatChild = try tree.addNode(root, .{ .Float = 3.14 });
+    var boolChild = try tree.addNode(root, .{ .Bool = true });
 
     testing.expectEqual(@as(usize, 6), root.getChildCount());
     testing.expect(root.findNth(0, .Null) != null);
 
-    testing.expect(root.findNth(0, .{.String = "Hello"}) != null);
-    testing.expect(root.findNth(0, .{.String = "foo"}) != null);
-    testing.expect(root.findNth(1, .{.String = "Hello"}) == null);
-    testing.expect(root.findNth(1, .{.String = "foo"}) == null);
+    testing.expect(root.findNth(0, .{ .String = "Hello" }) != null);
+    testing.expect(root.findNth(0, .{ .String = "foo" }) != null);
+    testing.expect(root.findNth(1, .{ .String = "Hello" }) == null);
+    testing.expect(root.findNth(1, .{ .String = "foo" }) == null);
     testing.expect(root.findNthAny(0, .String) != null);
     testing.expect(root.findNthAny(1, .String) != null);
     testing.expect(root.findNthAny(2, .String) == null);
 
-    testing.expect(root.findNth(0, .{.Int = 42}) != null);
-    testing.expect(root.findNth(0, .{.Int = 41}) == null);
-    testing.expect(root.findNth(1, .{.Int = 42}) == null);
+    testing.expect(root.findNth(0, .{ .Int = 42 }) != null);
+    testing.expect(root.findNth(0, .{ .Int = 41 }) == null);
+    testing.expect(root.findNth(1, .{ .Int = 42 }) == null);
     testing.expect(root.findNthAny(0, .Int) != null);
     testing.expect(root.findNthAny(1, .Int) == null);
 
-    testing.expect(root.findNth(0, .{.Float = 3.14}) != null);
-    testing.expect(root.findNth(0, .{.Float = 3.13}) == null);
-    testing.expect(root.findNth(1, .{.Float = 3.14}) == null);
+    testing.expect(root.findNth(0, .{ .Float = 3.14 }) != null);
+    testing.expect(root.findNth(0, .{ .Float = 3.13 }) == null);
+    testing.expect(root.findNth(1, .{ .Float = 3.14 }) == null);
     testing.expect(root.findNthAny(0, .Float) != null);
     testing.expect(root.findNthAny(1, .Float) == null);
 
     testing.expect(root.findNthAny(0, .Bool) != null);
-    testing.expect(root.findNth(0, .{.Bool = true}) != null);
+    testing.expect(root.findNth(0, .{ .Bool = true }) != null);
     testing.expect(root.findNthAny(1, .Bool) == null);
-    testing.expect(root.findNth(1, .{.Bool = true}) == null);
+    testing.expect(root.findNth(1, .{ .Bool = true }) == null);
 }
 
 test "parsing into nodes" {
@@ -1299,7 +1306,7 @@ pub fn imprint(self: *const ZNode, opts: ImprintOptions, onto_ptr: anytype) anye
     const T = @typeInfo(@TypeOf(onto_ptr)).Pointer.child;
     const TI = @typeInfo(T);
     switch (TI) {
-        .Void => { },
+        .Void => {},
         .Bool => {
             onto_ptr.* = switch (self.value) {
                 .Bool => |b| b,
@@ -1357,7 +1364,9 @@ pub fn imprint(self: *const ZNode, opts: ImprintOptions, onto_ptr: anytype) anye
                     }
                     err = true;
                 };
-                if (!err) { onto_ptr.* = t; }
+                if (!err) {
+                    onto_ptr.* = t;
+                }
             } else if (@typeInfo(opt_info.child) != .Pointer and @typeInfo(opt_info.child) != .Fn) {
                 var t = std.mem.zeroes(opt_info.child);
                 var err = false;
@@ -1367,7 +1376,9 @@ pub fn imprint(self: *const ZNode, opts: ImprintOptions, onto_ptr: anytype) anye
                     }
                     err = true;
                 };
-                if (!err) { onto_ptr.* = t; }
+                if (!err) {
+                    onto_ptr.* = t;
+                }
             } else {
                 // TODO: This is okay because we error on value not existing.
                 var t: opt_info.child = undefined;
@@ -1376,7 +1387,9 @@ pub fn imprint(self: *const ZNode, opts: ImprintOptions, onto_ptr: anytype) anye
                     // Missing check.
                     err = true;
                 };
-                if (!err) { onto_ptr.* = t; }
+                if (!err) {
+                    onto_ptr.* = t;
+                }
             }
         },
         .Struct => |struct_info| {
@@ -1386,16 +1399,15 @@ pub fn imprint(self: *const ZNode, opts: ImprintOptions, onto_ptr: anytype) anye
                 if (field.name[field.name.len - 1] == '_') {
                     continue;
                 }
-                const found = self.findNext(iter, .{.String = field.name});
+                const found = self.findNext(iter, .{ .String = field.name });
                 if (found) |child_field| {
                     // Found, set the iterator here.
                     iter = found;
                     // Special case for pointers, we just take the whole node.
                     const info = @typeInfo(field.field_type);
-                    if ((info == .Optional
-                            and @typeInfo(info.Optional.child) == .Pointer
-                            and @typeInfo(info.Optional.child).Pointer.size == .One) or
-                        (info == .Pointer and info.Pointer.size == .One)) {
+                    if ((info == .Optional and @typeInfo(info.Optional.child) == .Pointer and @typeInfo(info.Optional.child).Pointer.size == .One) or
+                        (info == .Pointer and info.Pointer.size == .One))
+                    {
                         try imprint(child_field, opts, &@field(onto_ptr, field.name));
                     } else {
                         if (child_field.getChild(0)) |child| {
@@ -1438,7 +1450,7 @@ pub fn imprint(self: *const ZNode, opts: ImprintOptions, onto_ptr: anytype) anye
                 },
                 .Slice => {
                     switch (self.value) {
-                        .String, => {
+                        .String => {
                             if (ptr_info.child != u8) {
                                 if (opts.no_invalid_types) {
                                     return error.InvalidNonStringSlice;
@@ -1483,16 +1495,16 @@ pub fn extract(comptime R: usize, comptime N: usize, tree: *ZTree(R, N), root: ?
             // No need.
         },
         .Bool => {
-            _ = try tree.addNode(root, .{.Bool = from_ptr.*});
+            _ = try tree.addNode(root, .{ .Bool = from_ptr.* });
         },
         .Float, .ComptimeFloat => {
-            _ = try tree.addNode(root, .{.Float = @floatCast(f32, from_ptr.*)});
+            _ = try tree.addNode(root, .{ .Float = @floatCast(f32, from_ptr.*) });
         },
         .Int, .ComptimeInt => {
-            _ = try tree.addNode(root, .{.Int = @intCast(i32, from_ptr.*)});
+            _ = try tree.addNode(root, .{ .Int = @intCast(i32, from_ptr.*) });
         },
         .Enum => {
-            _ = try tree.addNode(root, .{.String = std.meta.tagName(from_ptr.*)});
+            _ = try tree.addNode(root, .{ .String = std.meta.tagName(from_ptr.*) });
         },
         .Optional => |opt_info| {
             if (from_ptr.* != null) {
@@ -1507,7 +1519,7 @@ pub fn extract(comptime R: usize, comptime N: usize, tree: *ZTree(R, N), root: ?
                     continue;
                 }
                 std.debug.print("here {}\n", .{field.name});
-                var field_node = try tree.addNode(root, .{.String = field.name});
+                var field_node = try tree.addNode(root, .{ .String = field.name });
                 try extract(R, N, tree, field_node, opts, &@field(from_ptr.*, field.name));
             }
         },
@@ -1536,7 +1548,7 @@ pub fn extract(comptime R: usize, comptime N: usize, tree: *ZTree(R, N), root: ?
                             return error.InvalidNonStringSlice;
                         }
                     } else {
-                        _ = try tree.addNode(root, .{.String = from_ptr.*});
+                        _ = try tree.addNode(root, .{ .String = from_ptr.* });
                     }
                     return;
                 },
@@ -1548,7 +1560,6 @@ pub fn extract(comptime R: usize, comptime N: usize, tree: *ZTree(R, N), root: ?
 }
 
 test "extract" {
-
     var text_tree = ZTree(1, 100){};
     var text_root = try text_tree.appendText("foo:bar:baz;;42");
     text_root.show();
@@ -1582,7 +1593,7 @@ pub fn ZFactory(comptime T: type) type {
         const Self = @This();
 
         const Ctor = struct {
-            func: fn(allocator: *std.mem.Allocator, argz: *const ZNode) anyerror!*T,
+            func: fn (allocator: *std.mem.Allocator, argz: *const ZNode) anyerror!*T,
         };
 
         registered: std.StringHashMap(Ctor),
@@ -1590,7 +1601,7 @@ pub fn ZFactory(comptime T: type) type {
         /// Create the factory. The allocator is for the internal HashMap. Instantiated objects
         /// can have their own allocator.
         pub fn init(allocator: *std.mem.Allocator) Self {
-            return Self {
+            return Self{
                 .registered = std.StringHashMap(Ctor).init(allocator),
             };
         }
@@ -1625,7 +1636,7 @@ pub fn ZFactory(comptime T: type) type {
         ///
         /// The caller is responsible for the memory.
         pub fn instantiate(self: *Self, allocator: *std.mem.Allocator, node: *const ZNode) !*T {
-            const name = node.findNth(0, .{.String = "name"}) orelse return error.ZNodeMissingName;
+            const name = node.findNth(0, .{ .String = "name" }) orelse return error.ZNodeMissingName;
             const value_node = name.getChild(0) orelse return error.ZNodeMissingValueUnderName;
             if (value_node.value != .String) {
                 return error.ZNodeNameValueNotString;
@@ -1641,9 +1652,9 @@ const FooInterface = struct {
 
     allocator: ?*std.mem.Allocator = null,
     default: i32 = 100,
-    fooFn: ?fn(*Self) void = null,
+    fooFn: ?fn (*Self) void = null,
 
-    deinitFn: ?fn(*const Self) void = null,
+    deinitFn: ?fn (*const Self) void = null,
 
     pub fn foo(self: *Self) void {
         return self.fooFn.?(self);
@@ -1666,7 +1677,7 @@ const FooBar = struct {
                 .allocator = allocator,
                 .fooFn = foo,
                 .deinitFn = deinit,
-            }
+            },
         };
         try imprint(argz, ImprintOptions{}, self);
         return &self.interface;
