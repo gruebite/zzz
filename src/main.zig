@@ -131,6 +131,7 @@ pub const StreamingParser = struct {
         InvalidNewLineInString,
         InvalidCharacterAfterString,
         SemicolonWentPastRoot,
+        UnexpectedEof,
     };
 
     pub const State = enum {
@@ -172,10 +173,10 @@ pub const StreamingParser = struct {
         self.trailing_spaces = 0;
     }
 
-    pub fn hasCompleted(self: *const Self) bool {
+    pub fn completeOrError(self: *const Self) !void {
         switch (self.state) {
-            .ExpectZNode, .OpenLine, .EndString, .Comment, .OpenComment, .Indent => return true,
-            else => return false,
+            .ExpectZNode, .OpenLine, .EndString, .Comment, .OpenComment, .Indent => {},
+            else => return Error.UnexpectedEof,
         }
     }
 
@@ -629,12 +630,6 @@ pub const ZValue = union(enum) {
     }
 };
 
-/// ZTree errors.
-pub const ZError = error{
-    TreeFull,
-    TooManyRoots,
-};
-
 /// Represents a node in a static tree. Nodes have a parent, child, and sibling pointer
 /// to a spot in the array.
 pub const ZNode = struct {
@@ -976,6 +971,14 @@ pub const ZNode = struct {
     }
 };
 
+pub const ZTreeError = error{
+    TreeFull,
+    TooManyRoots,
+};
+
+/// ZTree errors.
+pub const ZError = StreamingParser.Error || ZTreeError;
+
 /// Represents a static fixed-size zzz tree. Values are slices over the text passed.
 pub fn ZTree(comptime R: usize, comptime S: usize) type {
     return struct {
@@ -986,7 +989,7 @@ pub fn ZTree(comptime R: usize, comptime S: usize) type {
         node_count: usize = 0,
 
         /// Appends correct zzz text to the tree, creating a new root.
-        pub fn appendText(self: *Self, text: []const u8) !*ZNode {
+        pub fn appendText(self: *Self, text: []const u8) ZError!*ZNode {
             var root = try self.addNode(null, .Null);
             var current = root;
             var current_depth: usize = 0;
@@ -1019,9 +1022,7 @@ pub fn ZTree(comptime R: usize, comptime S: usize) type {
                 }
             }
 
-            if (!stream.hasCompleted()) {
-                return error.UnfinishedString;
-            }
+            try stream.completeOrError();
 
             return root;
         }
