@@ -1291,9 +1291,6 @@ pub const ImprintOptions = struct {
     /// Undefined, Null, ErrorUnion, ErrorSet, Union, Fn, BoundFn, Opaque, Frame, AnyFrame, Vector,
     /// any non-ZNode pointers, and any non u8 slices.
     no_invalid_types: bool = false,
-    /// Allocate strings when adding them to the struct.
-    allocate_strings: bool = false,
-    allocator: ?*std.mem.Allocator = null,
 };
 
 // TODO: Removing anyerror causes infinite loop.
@@ -1451,12 +1448,7 @@ pub fn imprint(self: *const ZNode, opts: ImprintOptions, onto_ptr: anytype) anye
                                     return error.InvalidNonStringSlice;
                                 }
                             } else {
-                                if (opts.allocate_strings) {
-                                    const a = try std.mem.dupe(opts.allocator.?, u8, self.value.String);
-                                    onto_ptr.* = a;
-                                } else {
-                                    onto_ptr.* = self.value.String;
-                                }
+                                onto_ptr.* = self.value.String;
                             }
                         },
                         else => if (opts.ensure_correct_value_type) return error.ExpectedStringNode,
