@@ -1288,7 +1288,8 @@ pub const ImprintOptions = struct {
     /// Returns an error when a node couldn't be converted to an enum.
     ensure_enum_converted: bool = true,
     /// Returns an error when passed invalid types, instead of skipping. Current invalid types:
-    /// Undefined, Null, ErrorUnion, ErrorSet, Union, Fn, BoundFn, Opaque, Frame, AnyFrame, Vector
+    /// Undefined, Null, ErrorUnion, ErrorSet, Union, Fn, BoundFn, Opaque, Frame, AnyFrame, Vector,
+    /// any non-ZNode pointers, and any non u8 slices.
     no_invalid_types: bool = false,
     /// Allocate strings when adding them to the struct.
     allocate_strings: bool = false,
