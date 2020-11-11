@@ -1125,6 +1125,26 @@ pub fn ZTree(comptime R: usize, comptime S: usize) type {
     };
 }
 
+test "stable after error" {
+    const testing = std.testing;
+
+    var tree = ZTree(2, 6){};
+    // Using 1 root, 3 nodes (+1 for root).
+    _ = try tree.appendText("foo:bar");
+    testing.expectEqual(@as(usize, 1), tree.root_count);
+    testing.expectEqual(@as(usize, 3), tree.node_count);
+    testing.expectError(ZError.TreeFull, tree.appendText("bar:foo:baz:ha:ha"));
+    testing.expectEqual(@as(usize, 1), tree.root_count);
+    testing.expectEqual(@as(usize, 3), tree.node_count);
+    // Using +1 root, +2 node = 2 roots, 5 nodes.
+    _ = try tree.appendText("bar");
+    testing.expectEqual(@as(usize, 2), tree.root_count);
+    testing.expectEqual(@as(usize, 5), tree.node_count);
+    testing.expectError(ZError.TooManyRoots, tree.appendText("foo"));
+    testing.expectEqual(@as(usize, 2), tree.root_count);
+    testing.expectEqual(@as(usize, 5), tree.node_count);
+}
+
 test "static tree" {
     const testing = std.testing;
     const text =
