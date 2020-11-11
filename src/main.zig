@@ -990,7 +990,16 @@ pub fn ZTree(comptime R: usize, comptime S: usize) type {
 
         /// Appends correct zzz text to the tree, creating a new root.
         pub fn appendText(self: *Self, text: []const u8) ZError!*ZNode {
+            const current_node_count = self.node_count;
             var root = try self.addNode(null, .Null);
+            // Undo everything we did if we encounter an error.
+            errdefer {
+                // Undo adding root above.
+                self.root_count -= 1;
+                // Reset to node count before adding root.
+                self.node_count = current_node_count;
+            }
+            // If we error, undo adding any of this.
             var current = root;
             var current_depth: usize = 0;
 
@@ -1038,13 +1047,14 @@ pub fn ZTree(comptime R: usize, comptime S: usize) type {
             return self.roots[0..self.root_count];
         }
 
-        /// Adds a node given a parent. Null parent starts a new root.
+        /// Adds a node given a parent. Null parent starts a new root. When adding nodes manually
+        /// care must be taken to ensure tree is left in known state after erroring from being full.
+        /// Either reset to root_count/node_count when an error occurs, or leave as is (unfinished).
         pub fn addNode(self: *Self, parent: ?*ZNode, value: ZValue) ZError!*ZNode {
             if (self.node_count >= S) {
                 return ZError.TreeFull;
             }
             var node = &self.nodes[self.node_count];
-            self.node_count += 1;
             if (parent == null) {
                 if (self.root_count >= R) {
                     return ZError.TooManyRoots;
@@ -1052,6 +1062,7 @@ pub fn ZTree(comptime R: usize, comptime S: usize) type {
                 self.roots[self.root_count] = node;
                 self.root_count += 1;
             }
+            self.node_count += 1;
             node.value = value;
             node.parent = parent;
             node.sibling = null;
@@ -1072,6 +1083,13 @@ pub fn ZTree(comptime R: usize, comptime S: usize) type {
         /// Recursively copies a node from another part of the tree onto a new parent. Strings will
         /// be by reference.
         pub fn copyNode(self: *Self, parent: ?*ZNode, node: *const ZNode) ZError!*ZNode {
+            const current_root_count = self.root_count;
+            const current_node_count = self.node_count;
+            // Likely because tree was full.
+            errdefer {
+                self.root_count = current_root_count;
+                self.node_count = current_node_count;
+            }
             var last_depth: isize = 1;
             var depth: isize = 0;
             var iter = node;
