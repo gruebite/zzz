@@ -6,6 +6,8 @@ zzz syntax describes a tree of strings. It has little syntactic noise and is rea
 
 zzz's focus is to be a simple and lightweight format. This library implements a static tree which has zero allocations. Here's an example reading a tree:
 
+**Note:** This implementation is being iterated on while I use this for another project. API stability isn't a guarantee quite yet, and will also be subject to changes as Zig changes.
+
 ```js
 // 1 is the max number of roots, 100 is the max number of nodes.
 var tree = zzz.ZTree(1, 100){};

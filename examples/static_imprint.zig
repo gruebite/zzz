@@ -1,5 +1,3 @@
-
-
 pub const std = @import("std");
 pub const zzz = @import("zzz");
 
@@ -7,9 +5,7 @@ const dragon = @embedFile("../example-data/dragon.zzz");
 
 // Default transformer can handle enums by name or integer.
 pub const AttackType = enum {
-    Slashing,
-    Fire,
-    Magic
+    Slashing, Fire, Magic
 };
 
 // Imprinting performs zero allocations, so any arrays must be fixed.
@@ -17,10 +13,12 @@ pub const MAX_ATTACKS = 10;
 
 pub const MAX_TYPES = 2;
 
+fn foo() void { }
+
 pub const Attack = struct {
     name: []const u8 = "",
     types: [MAX_TYPES]?AttackType = [_]?AttackType{null} ** MAX_TYPES,
-    damage: [2]i32 = [_]i32{0, 0},
+    damage: [2]i32 = [_]i32{ 0, 0 },
     range: i32 = 0,
     description: []const u8 = "",
 };
@@ -31,7 +29,7 @@ pub const Monster = struct {
     health: i32 = 0,
     attacks: [MAX_ATTACKS]?Attack = [_]?Attack{null} ** MAX_ATTACKS,
     // Structs can be partially filled to defer more complex or dynamic structures.
-    complex: ?*const zzz.ZNode = null,
+    //complex: ?*const zzz.ZNode = null,
 };
 
 pub fn main() !void {
@@ -44,19 +42,17 @@ pub fn main() !void {
     // Debug print.
     tree.show();
 
-    var monster = Monster{};
-    // Imprint takes a pointer to a node and a struct.
-    try zzz.imprint(node, zzz.ImprintOptions{}, &monster);
+    var monster = try node.imprint(Monster);
 
     std.debug.print("Name: {}\n", .{monster.name});
     std.debug.print("Health: {}\n", .{monster.health});
     var i: usize = 0;
     while (monster.attacks[i]) |att| : (i += 1) {
         std.debug.print("  Attack: {}\n", .{att.name});
-        std.debug.print("    Types: {} {}\n", .{att.types[0], att.types[1]});
-        std.debug.print("    Damage: {} {}\n", .{att.damage[0], att.damage[1]});
+        std.debug.print("    Types: {} {}\n", .{ att.types[0], att.types[1] });
+        std.debug.print("    Damage: {} {}\n", .{ att.damage[0], att.damage[1] });
         std.debug.print("    Range: {}\n", .{att.range});
         std.debug.print("    Description: {}\n\n", .{att.description});
     }
-    monster.complex.?.show();
+    //monster.complex.?.show();
 }

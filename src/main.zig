@@ -630,6 +630,35 @@ pub const ZValue = union(enum) {
     }
 };
 
+/// Result of imprinting
+pub fn Imprint(comptime T: type) type {
+    return struct {
+        result: T,
+        arena: std.heap.ArenaAllocator,
+    };
+}
+
+pub const ImprintError = error{
+    ExpectedBoolNode,
+    ExpectedFloatNode,
+    ExpectedUnsignedIntNode,
+    ExpectedIntNode,
+    ExpectedIntOrStringNode,
+    ExpectedStringNode,
+
+    FailedToConvertStringToEnum,
+    FailedToConvertIntToEnum,
+
+    FieldNodeDoesNotExist,
+    ValueNodeDoesNotExist,
+    ArrayElemDoesNotExist,
+
+    OutOfMemory,
+
+    InvalidPointerType,
+    InvalidType,
+};
+
 /// Represents a node in a static tree. Nodes have a parent, child, and sibling pointer
 /// to a spot in the array.
 pub const ZNode = struct {
@@ -755,7 +784,7 @@ pub const ZNode = struct {
     /// Finds the next child after the given iterator. This is good for when you can guess the order
     /// of the nodes, which can cut down on starting from the beginning. Passing null starts over
     /// from the beginning. Returns the found node or null (it will loop back around).
-    pub fn findNext(self: *const Self, start: ?*const ZNode, value: ZValue) ?*ZNode {
+    pub fn findNextChild(self: *const Self, start: ?*const ZNode, value: ZValue) ?*ZNode {
         var iter: ?*ZNode = self.child;
         if (start) |si| {
             iter = si.sibling;
@@ -865,6 +894,184 @@ pub const ZNode = struct {
             };
             c.value = ZValue{ .Int = integer };
         }
+    }
+
+    fn imprint_(self: *const Self, comptime T: type, allocator: ?*std.mem.Allocator) ImprintError!T {
+        const TI = @typeInfo(T);
+        switch (TI) {
+            .Void => {},
+            .Bool => {
+                return switch (self.value) {
+                    .Bool => |b| b,
+                    else => ImprintError.ExpectedBoolNode,
+                };
+            },
+            .Float, .ComptimeFloat => {
+                return switch (self.value) {
+                    .Float => |n| @floatCast(T, n),
+                    .Int => |n| @intToFloat(T, n),
+                    else => ImprintError.ExpectedFloatNode,
+                };
+            },
+            .Int, .ComptimeInt => {
+                const is_signed = (TI == .Int and TI.Int.is_signed) or (TI == .ComptimeInt and TI.CompTimeInt.is_signed);
+                switch (self.value) {
+                    .Int => |n| {
+                        if (is_signed) {
+                            return @intCast(T, n);
+                        } else {
+                            if (n < 0) {
+                                return ImprintError.ExpectedUnsignedIntNode;
+                            }
+                            return @intCast(T, n);
+                        }
+                    },
+                    else => return ImprintError.ExpectedIntNode,
+                }
+            },
+            .Enum => {
+                switch (self.value) {
+                    .Int => |int| {
+                        return std.meta.intToEnum(T, int) catch |_| {
+                            return ImprintError.FailedToConvertIntToEnum;
+                        };
+                    },
+                    .String => {
+                        if (std.meta.stringToEnum(T, self.value.String)) |e| {
+                            return e;
+                        } else {
+                            return ImprintError.FailedToConvertStringToEnum;
+                        }
+                    },
+                    else => return ImprintError.ExpectedIntOrStringNode,
+                }
+            },
+            .Optional => |opt_info| {
+                const CI = @typeInfo(opt_info.child);
+                // Aggregate types have a null root, so could still exist.
+                if (self.value != .Null or CI == .Array or CI == .Struct or (CI == .Pointer and CI.Pointer.size == .Slice)) {
+                    return try self.imprint_(opt_info.child, allocator);
+                } else {
+                    return null;
+                }
+            },
+            .Struct => |struct_info| {
+                var iter: ?*const ZNode = null;
+                var result: T = .{};
+
+                inline for (struct_info.fields) |field, i| {
+                    // Skip underscores.
+                    if (field.name[0] == '_') {
+                        continue;
+                    }
+
+                    const found = self.findNextChild(iter, .{ .String = field.name });
+                    if (found) |child_node| {
+                        if (child_node.child) |value_node| {
+                            @field(result, field.name) = try value_node.imprint_(field.field_type, allocator);
+                        }
+
+                        // Found, set the iterator here.
+                        iter = found;
+                    }
+                }
+                return result;
+            },
+            // Only handle [N]?T, where T is any other valid type.
+            .Array => |array_info| {
+                // Arrays are weird. They work on siblings.
+                // TODO: For some types this causes a crash like [N]fn() void types.
+                var r: T = std.mem.zeroes(T);
+                var iter: ?*const ZNode = self;
+                comptime var i: usize = 0;
+                inline while (i < array_info.len) : (i += 1) {
+                    if (iter) |it| {
+                        r[i] = try it.imprint_(array_info.child, allocator);
+                    }
+                    if (iter) |it| {
+                        iter = it.sibling;
+                    }
+                }
+                return r;
+            },
+            .Pointer => |ptr_info| {
+                switch (ptr_info.size) {
+                    .One => {
+                        if (ptr_info.child == ZNode) {
+                            // This is an odd case because we usually pass the child of a node
+                            // for the value, but here since we explicitely asked for the node,
+                            // it likely means the top. By taking the parent we force ZNodes
+                            // only working when part of a large struct and not stand alone.
+                            //
+                            // Something like this wouldn't work: ```
+                            // root.imprint(*ZNode);
+                            // ```
+                            return self.parent.?;
+                        } else if (allocator) |alloc| {
+                            var ptr = try alloc.create(ptr_info.child);
+                            ptr.* = try self.imprint_(ptr_info.child, allocator);
+                            return ptr;
+                        } else {
+                            return ImprintError.InvalidPointerType;
+                        }
+                    },
+                    .Slice => {
+                        if (ptr_info.child == u8) {
+                            switch (self.value) {
+                                .String => {
+                                    if (allocator) |alloc| {
+                                        return try std.mem.dupe(alloc, u8, self.value.String);
+                                    } else {
+                                        return self.value.String;
+                                    }
+                                },
+                                else => return ImprintError.ExpectedStringNode,
+                            }
+                        } else if (allocator) |alloc| {
+                            // Same as pointer above. We take parent.
+                            var ret = try alloc.alloc(ptr_info.child, self.parent.?.getChildCount());
+                            var iter: ?*const ZNode = self;
+                            var i: usize = 0;
+                            while (i < ret.len) : (i += 1) {
+                                if (iter) |it| {
+                                    ret[i] = try it.imprint_(ptr_info.child, allocator);
+                                } else {
+                                    if (@typeInfo(ptr_info.child) == .Optional) {
+                                        ret[i] = null;
+                                    } else {
+                                        return ImprintError.ArrayElemDoesNotExist;
+                                    }
+                                }
+                                if (iter) |it| {
+                                    iter = it.sibling;
+                                }
+                            }
+                            return ret;
+                        } else {
+                            return ImprintError.InvalidType;
+                        }
+                    },
+                    else => return ImprintError.InvalidType,
+                }
+            },
+            else => return ImprintError.InvalidType,
+        }
+    }
+
+    pub fn imprint(self: *const Self, comptime T: type) ImprintError!T {
+        return try self.imprint_(T, null);
+    }
+
+    pub fn imprintAlloc(self: *const Self, comptime T: type, allocator: *std.mem.Allocator) ImprintError!Imprint(T) {
+        var arena = std.heap.ArenaAllocator.init(allocator);
+        errdefer {
+            // Free everything.
+            arena.deinit();
+        }
+        return Imprint(T){
+            .result = try self.imprint_(T, &arena.allocator),
+            .arena = arena,
+        };
     }
 
     /// Outputs a `ZNode` and its children on a single line. This can be parsed back.
@@ -1097,7 +1304,6 @@ pub fn ZTree(comptime R: usize, comptime S: usize) type {
             var plast: ?*ZNode = null;
             var pfirst: ?*ZNode = null;
             while (iter.next(&depth)) |child| : (iter = child) {
-                std.debug.print("{}: {}\n", .{ child.value, depth });
                 if (depth > last_depth) {
                     piter = plast;
                     last_depth = depth;
@@ -1120,6 +1326,83 @@ pub fn ZTree(comptime R: usize, comptime S: usize) type {
         pub fn show(self: *const Self) void {
             for (self.rootSlice()) |rt, i| {
                 rt.show();
+            }
+        }
+
+        /// Extract a struct's values onto a tree with a new root. Performs no allocations so any strings
+        /// are by reference.
+        pub fn extract(self: *Self, root: ?*ZNode, from_ptr: anytype) anyerror!void {
+            if (root == null) {
+                return self.extract(try self.addNode(null, .Null), from_ptr);
+            }
+            if (@typeInfo(@TypeOf(from_ptr)) != .Pointer) {
+                @compileError("Passed struct must be a pointer.");
+            }
+            const T = @typeInfo(@TypeOf(from_ptr)).Pointer.child;
+            const TI = @typeInfo(T);
+            switch (TI) {
+                .Void => {
+                    // No need.
+                },
+                .Bool => {
+                    _ = try self.addNode(root, .{ .Bool = from_ptr.* });
+                },
+                .Float, .ComptimeFloat => {
+                    _ = try self.addNode(root, .{ .Float = @floatCast(f32, from_ptr.*) });
+                },
+                .Int, .ComptimeInt => {
+                    _ = try self.addNode(root, .{ .Int = @intCast(i32, from_ptr.*) });
+                },
+                .Enum => {
+                    _ = try self.addNode(root, .{ .String = std.meta.tagName(from_ptr.*) });
+                },
+                .Optional => |opt_info| {
+                    if (from_ptr.* != null) {
+                        return self.extract(root, &from_ptr.*.?);
+                    }
+                },
+                .Struct => |struct_info| {
+                    var iter: ?*const ZNode = null;
+
+                    inline for (struct_info.fields) |field, i| {
+                        if (field.name[field.name.len - 1] == '_') {
+                            continue;
+                        }
+                        var field_node = try self.addNode(root, .{ .String = field.name });
+                        try self.extract(field_node, &@field(from_ptr.*, field.name));
+                    }
+                },
+                .Array => |array_info| {
+                    comptime var i: usize = 0;
+                    inline while (i < array_info.len) : (i += 1) {
+                        var null_node = try self.addNode(root, .Null);
+                        try self.extract(null_node, &from_ptr.*[i]);
+                    }
+                },
+                .Pointer => |ptr_info| {
+                    switch (ptr_info.size) {
+                        .One => {
+                            if (ptr_info.child == ZNode) {
+                                _ = try self.copyNode(root, from_ptr.*);
+                            } else {
+                                try self.extract(root, &from_ptr.*.*);
+                            }
+                        },
+                        .Slice => {
+                            if (ptr_info.child != u8) {
+                                for (from_ptr.*) |_, i| {
+                                    var null_node = try self.addNode(root, .Null);
+                                    try self.extract(null_node, &from_ptr.*[i]);
+                                }
+                            } else {
+                                _ = try self.addNode(root, .{ .String = from_ptr.* });
+                            }
+                            return;
+                        },
+                        else => return error.InvalidType,
+                    }
+                },
+                else => return error.InvalidType,
             }
         }
     };
@@ -1162,94 +1445,16 @@ test "static tree" {
     const node = try tree.appendText(text);
     node.convertStrings();
 
-    var iter = node.findNext(null, .{ .String = "max_particles" });
+    var iter = node.findNextChild(null, .{ .String = "max_particles" });
     testing.expect(iter != null);
-    iter = node.findNext(iter, .{ .String = "texture" });
+    iter = node.findNextChild(iter, .{ .String = "texture" });
     testing.expect(iter != null);
-    iter = node.findNext(iter, .{ .String = "max_particles" });
+    iter = node.findNextChild(iter, .{ .String = "max_particles" });
     testing.expect(iter != null);
-    iter = node.findNext(iter, .{ .String = "systems" });
+    iter = node.findNextChild(iter, .{ .String = "systems" });
     testing.expect(iter != null);
-    iter = node.findNext(iter, .{ .Int = 42 });
+    iter = node.findNextChild(iter, .{ .Int = 42 });
     testing.expect(iter == null);
-}
-
-test "node conforming imprint" {
-    const testing = std.testing;
-
-    const ConformingEnum = enum {
-        Foo,
-    };
-
-    const ConformingSubStruct = struct {
-        name: []const u8 = "default",
-        params: *const ZNode = undefined,
-    };
-
-    const ConformingStruct = struct {
-        max_particles: ?i32 = undefined,
-        texture: []const u8 = "default",
-        systems: [20]?ConformingSubStruct = [_]?ConformingSubStruct{null} ** 20,
-        en: ?ConformingEnum = null,
-        exists: ?void = null,
-    };
-
-    const text =
-        \\max_particles: 100
-        \\texture: circle
-        \\en: Foo
-        \\systems:
-        \\  : name:Emitter
-        \\    params:
-        \\      some,stuff,hehe
-        \\  : name:Fire
-        \\    params
-        \\exists: anything here
-    ;
-    var tree = ZTree(1, 100){};
-    var node = try tree.appendText(text);
-    node.convertStrings();
-
-    var example = ConformingStruct{};
-    try imprint(node, ImprintOptions{
-        .ensure_node_exists = true,
-        .ensure_value_exists = true,
-        .ensure_correct_value_type = true,
-    }, &example);
-    testing.expectEqual(@as(i32, 100), example.max_particles.?);
-    testing.expectEqualSlices(u8, "circle", example.texture);
-    testing.expect(null != example.systems[0]);
-    testing.expect(null != example.systems[1]);
-    testing.expectEqual(@as(?ConformingSubStruct, null), example.systems[2]);
-    testing.expectEqual(ConformingEnum.Foo, example.en.?);
-    testing.expectEqualSlices(u8, "params", example.systems[0].?.params.value.String);
-}
-
-test "node nonconforming imprint" {
-    const testing = std.testing;
-
-    const NonConformingStruct = struct {
-        max_particles: bool = undefined,
-        no_exist: bool = undefined,
-    };
-
-    const text =
-        \\max_particles: 100
-        \\texture: circle
-        \\en: Foo
-        \\systems:
-        \\  : name:Emitter
-        \\    params:
-        \\      some,stuff,hehe
-        \\  : name:Fire
-    ;
-    var tree = ZTree(1, 100){};
-    var node = try tree.appendText(text);
-    node.convertStrings();
-
-    var example = NonConformingStruct{};
-    try imprint(node, ImprintOptions{ .ensure_correct_value_type = false }, &example);
-    testing.expectError(error.NodeDoesNotExist, imprint(node, ImprintOptions{ .ensure_node_exists = true, .ensure_correct_value_type = false }, &example));
 }
 
 test "node appending and searching" {
@@ -1316,279 +1521,116 @@ test "parsing into nodes" {
     ;
 }
 
-/// Options that can be enabled when calling `imprint` onto a struct.
-pub const ImprintOptions = struct {
-    /// Return an error when a struct field is missing from the node tree.
-    ensure_node_exists: bool = false,
-    /// Returns an error when a field's node exists, but the value doesn't.
-    ensure_value_exists: bool = false,
-    /// Returns an error when a node's value is of the wrong type.
-    ensure_correct_value_type: bool = true,
-    /// Returns an error when a node couldn't be converted to an enum.
-    ensure_enum_converted: bool = true,
-    /// Returns an error when passed invalid types, instead of skipping. Current invalid types:
-    /// Undefined, Null, ErrorUnion, ErrorSet, Union, Fn, BoundFn, Opaque, Frame, AnyFrame, Vector,
-    /// any non-ZNode pointers, and any non u8 slices.
-    no_invalid_types: bool = false,
-};
 
-// TODO: Removing anyerror causes infinite loop.
-/// Imprints a node into a type. The only types allowed are zzz types, structs, fixed arrays,
-/// optionals, and enums. This function performs no allocations and u8 slices refer to strings
-/// by reference. Enums can be mapped from string or int.
-pub fn imprint(self: *const ZNode, opts: ImprintOptions, onto_ptr: anytype) anyerror!void {
-    if (@typeInfo(@TypeOf(onto_ptr)) != .Pointer) {
-        @compileError("Passed struct must be a pointer.");
-    }
-    const T = @typeInfo(@TypeOf(onto_ptr)).Pointer.child;
-    const TI = @typeInfo(T);
-    switch (TI) {
-        .Void => {},
-        .Bool => {
-            onto_ptr.* = switch (self.value) {
-                .Bool => |b| b,
-                else => if (opts.ensure_correct_value_type) return error.ExpectedBool else return,
-            };
-        },
-        .Float, .ComptimeFloat => {
-            onto_ptr.* = switch (self.value) {
-                .Float => |n| @floatCast(T, n),
-                .Int => |n| @intToFloat(T, n),
-                else => if (opts.ensure_correct_value_type) return error.ExpectedFloat else return,
-            };
-        },
-        .Int, .ComptimeInt => {
-            const is_signed = (TI == .Int and TI.Int.is_signed) or (TI == .ComptimeInt and TI.CompTimeInt.is_signed);
-            onto_ptr.* = switch (self.value) {
-                .Int => |n| blk: {
-                    if (is_signed) {
-                        break :blk @intCast(T, n);
-                    } else {
-                        // Sanity.
-                        if (n < 0) {
-                            return error.ExpectedUnsignedInt;
-                        }
-                        break :blk @intCast(T, n);
-                    }
-                },
-                else => if (opts.ensure_correct_value_type) return error.ExpectedInt else return,
-            };
-        },
-        .Enum => {
-            switch (self.value) {
-                .Int => |int| {
-                    onto_ptr.* = try std.meta.intToEnum(T, int);
-                },
-                .String => {
-                    if (std.meta.stringToEnum(T, self.value.String)) |e| {
-                        onto_ptr.* = e;
-                    } else {
-                        return if (opts.ensure_enum_converted) error.CouldNotConvertStringToEnum;
-                    }
-                },
-                else => if (opts.ensure_correct_value_type) return error.ExpectedIntOrString,
-            }
-        },
-        .Optional => |opt_info| {
-            // Special case for optional structs, otherwise fields won't be initialized.
-            // TODO: Investigate other special cases.
-            if (@typeInfo(opt_info.child) == .Struct) {
-                var t: opt_info.child = opt_info.child{};
-                var err = false;
-                imprint(self, opts, &t) catch |e| {
-                    if (e != error.ValueDoesNotExist) {
-                        return e;
-                    }
-                    err = true;
-                };
-                if (!err) {
-                    onto_ptr.* = t;
-                }
-            } else if (@typeInfo(opt_info.child) != .Pointer and @typeInfo(opt_info.child) != .Fn) {
-                var t = std.mem.zeroes(opt_info.child);
-                var err = false;
-                imprint(self, opts, &t) catch |e| {
-                    if (e != error.ValueDoesNotExist) {
-                        return e;
-                    }
-                    err = true;
-                };
-                if (!err) {
-                    onto_ptr.* = t;
-                }
-            } else {
-                // TODO: This is okay because we error on value not existing.
-                var t: opt_info.child = undefined;
-                try imprint(self, opts, &t);
-                onto_ptr.* = t;
-            }
-        },
-        .Struct => |struct_info| {
-            var iter: ?*const ZNode = null;
+test "node conforming imprint" {
+    const testing = std.testing;
 
-            inline for (struct_info.fields) |field, i| {
-                if (field.name[field.name.len - 1] == '_') {
-                    continue;
-                }
-                const found = self.findNext(iter, .{ .String = field.name });
-                if (found) |child_field| {
-                    // Found, set the iterator here.
-                    iter = found;
-                    // Special case for pointers, we just take the whole node.
-                    const info = @typeInfo(field.field_type);
-                    if ((info == .Optional and @typeInfo(info.Optional.child) == .Pointer and @typeInfo(info.Optional.child).Pointer.size == .One) or
-                        (info == .Pointer and info.Pointer.size == .One))
-                    {
-                        try imprint(child_field, opts, &@field(onto_ptr, field.name));
-                    } else {
-                        if (child_field.getChild(0)) |child| {
-                            try imprint(child, opts, &@field(onto_ptr, field.name));
-                        } else if (opts.ensure_value_exists) {
-                            return error.ValueDoesNotExist;
-                        }
-                    }
-                } else if (opts.ensure_node_exists) {
-                    return error.NodeDoesNotExist;
-                }
-            }
-        },
-        // Only handle [N]?T, where T is any other valid type.
-        .Array => |array_info| {
-            // Arrays are weird. They work on siblings, not children.
-            if (self.parent) |parent| {
-                var r = std.mem.zeroes(T);
-                var i: usize = 0;
-                while (i < r.len) : (i += 1) {
-                    if (i >= parent.getChildCount()) {
-                        break;
-                    }
-                    try imprint(parent.getChild(i).?, opts, &r[i]);
-                }
-                onto_ptr.* = r;
-            }
-        },
-        // Only handle []const u8 and ZNode pointers.
-        .Pointer => |ptr_info| {
-            switch (ptr_info.size) {
-                .One => {
-                    if (ptr_info.child == ZNode) {
-                        onto_ptr.* = self;
-                        return;
-                    }
-                    if (opts.no_invalid_types) {
-                        return error.InvalidPointerType;
-                    }
-                },
-                .Slice => {
-                    switch (self.value) {
-                        .String => {
-                            if (ptr_info.child != u8) {
-                                if (opts.no_invalid_types) {
-                                    return error.InvalidNonStringSlice;
-                                }
-                            } else {
-                                onto_ptr.* = self.value.String;
-                            }
-                        },
-                        else => if (opts.ensure_correct_value_type) return error.ExpectedStringNode,
-                    }
-                    return;
-                },
-                else => if (opts.no_invalid_types) return error.InvalidType,
-            }
-        },
-        else => if (opts.no_invalid_types) return error.InvalidType,
-    }
+    const ConformingEnum = enum {
+        Foo,
+    };
+    comptime var x: i32 = 0;
+
+    const ConformingSubStruct = struct {
+        name: []const u8 = "default",
+        params: ?*const ZNode = null,
+    };
+
+    const ConformingStruct = struct {
+        max_particles: ?i32 = null,
+        texture: []const u8 = "default",
+        systems: [20]?ConformingSubStruct = [_]?ConformingSubStruct{null} ** 20,
+        en: ?ConformingEnum = null,
+        exists: ?void = null,
+    };
+
+    const text =
+        \\max_particles: 100
+        \\texture: circle
+        \\en: Foo
+        \\systems:
+        \\  : name:Emitter
+        \\    params:
+        \\      some,stuff,hehe
+        \\  : name:Fire
+        \\    params
+        \\exists: anything here
+    ;
+    var tree = ZTree(1, 100){};
+    var node = try tree.appendText(text);
+    node.convertStrings();
+
+    //const example = try node.imprint(ConformingStruct);
+    //testing.expectEqual(@as(i32, 100), example.max_particles.?);
+    //testing.expectEqualSlices(u8, "circle", example.texture);
+    //testing.expect(null != example.systems[0]);
+    //testing.expect(null != example.systems[1]);
+    //testing.expectEqual(@as(?ConformingSubStruct, null), example.systems[2]);
+    //testing.expectEqual(ConformingEnum.Foo, example.en.?);
+    //testing.expectEqualSlices(u8, "params", example.systems[0].?.params.?.value.String);
 }
 
-pub const ExtractOptions = struct {
-    /// Error when there is an invalid type, instead of skipping. See ImprintOptions for list.
-    no_invalid_types: bool = false,
-};
+test "node nonconforming imprint" {
+    const testing = std.testing;
 
-/// Extract a struct's values onto a tree with a new root.
-pub fn extract(comptime R: usize, comptime N: usize, tree: *ZTree(R, N), root: ?*ZNode, opts: ExtractOptions, from_ptr: anytype) anyerror!void {
-    if (root == null) {
-        return extract(R, N, tree, try tree.addNode(null, .Null), opts, from_ptr);
-    }
-    if (@typeInfo(@TypeOf(from_ptr)) != .Pointer) {
-        @compileError("Passed struct must be a pointer.");
-    }
-    const T = @typeInfo(@TypeOf(from_ptr)).Pointer.child;
-    const TI = @typeInfo(T);
-    switch (TI) {
-        .Void => {
-            // No need.
-        },
-        .Bool => {
-            _ = try tree.addNode(root, .{ .Bool = from_ptr.* });
-        },
-        .Float, .ComptimeFloat => {
-            _ = try tree.addNode(root, .{ .Float = @floatCast(f32, from_ptr.*) });
-        },
-        .Int, .ComptimeInt => {
-            _ = try tree.addNode(root, .{ .Int = @intCast(i32, from_ptr.*) });
-        },
-        .Enum => {
-            _ = try tree.addNode(root, .{ .String = std.meta.tagName(from_ptr.*) });
-        },
-        .Optional => |opt_info| {
-            if (from_ptr.* != null) {
-                return extract(R, N, tree, root, opts, &from_ptr.*.?);
-            }
-        },
-        .Struct => |struct_info| {
-            var iter: ?*const ZNode = null;
+    const NonConformingStruct = struct {
+        max_particles: bool = false,
+    };
 
-            inline for (struct_info.fields) |field, i| {
-                if (field.name[field.name.len - 1] == '_') {
-                    continue;
-                }
-                std.debug.print("here {}\n", .{field.name});
-                var field_node = try tree.addNode(root, .{ .String = field.name });
-                try extract(R, N, tree, field_node, opts, &@field(from_ptr.*, field.name));
-            }
-        },
-        .Array => |array_info| {
-            // Arrays are weird. They work on siblings, not children.
-            std.debug.print("{}\n", .{array_info});
-            comptime var i: usize = 0;
-            inline while (i < array_info.len) : (i += 1) {
-                var null_node = try tree.addNode(root, .Null);
-                try extract(R, N, tree, null_node, opts, &from_ptr.*[i]);
-            }
-        },
-        // Only handle []const u8 and ZNode pointers.
-        .Pointer => |ptr_info| {
-            switch (ptr_info.size) {
-                .One => {
-                    if (ptr_info.child == ZNode) {
-                        _ = try tree.copyNode(root, from_ptr.*);
-                    } else if (opts.no_invalid_types) {
-                        return error.InvalidPointerType;
-                    }
-                },
-                .Slice => {
-                    if (ptr_info.child != u8) {
-                        if (opts.no_invalid_types) {
-                            return error.InvalidNonStringSlice;
-                        }
-                    } else {
-                        _ = try tree.addNode(root, .{ .String = from_ptr.* });
-                    }
-                    return;
-                },
-                else => if (opts.no_invalid_types) return error.InvalidType,
-            }
-        },
-        else => if (opts.no_invalid_types) return error.InvalidType,
+    const text =
+        \\max_particles: 100
+        \\texture: circle
+        \\en: Foo
+        \\systems:
+        \\  : name:Emitter
+        \\    params:
+        \\      some,stuff,hehe
+        \\  : name:Fire
+    ;
+    var tree = ZTree(1, 100){};
+    var node = try tree.appendText(text);
+    node.convertStrings();
+
+    testing.expectError(ImprintError.ExpectedBoolNode, node.imprint(NonConformingStruct));
+}
+
+test "imprint allocations" {
+    const testing = std.testing;
+
+    const SysAlloc = struct {
+        name: []const u8 = "",
+        params: ?*const ZNode = null,
+    };
+    const FooAlloc = struct {
+        max_particles: ?*i32 = null,
+        texture: []const u8 = "",
+        systems: []SysAlloc = undefined,
+    };
+    const text =
+        \\max_particles: 100
+        \\texture: circle
+        \\en: Foo
+        \\systems:
+        \\  : name:Emitter
+        \\    params:
+        \\      some,stuff,hehe
+        \\  : name:Fire
+        \\    params
+    ;
+    var tree = ZTree(1, 100){};
+    var node = try tree.appendText(text);
+    node.convertStrings();
+    var imprint = try node.imprintAlloc(FooAlloc, testing.allocator);
+    testing.expectEqual(@as(i32, 100), imprint.result.max_particles.?.*);
+    for (imprint.result.systems) |sys, i| {
+        testing.expectEqualSlices(u8, ([_][]const u8{"Emitter", "Fire"})[i], sys.name);
     }
+    imprint.arena.deinit();
 }
 
 test "extract" {
+    const testing = std.testing;
     var text_tree = ZTree(1, 100){};
     var text_root = try text_tree.appendText("foo:bar:baz;;42");
-    text_root.show();
 
     const FooNested = struct {
         a_bool: bool = true,
@@ -1599,15 +1641,16 @@ test "extract" {
         foo: ?i32 = null,
         hi: []const u8 = "lol",
         arr: [2]FooNested = [_]FooNested{.{}} ** 2,
+        slice: []const FooNested = &[_]FooNested{.{}, .{}, .{}},
+        ptr: *const FooNested = &FooNested{},
         a_node: *ZNode = undefined,
     }{
         .a_node = text_root,
     };
 
     var tree = ZTree(1, 100){};
-    try extract(1, 100, &tree, null, ExtractOptions{}, &foo_struct);
-    std.debug.print("\n", .{});
-    tree.show();
+    try tree.extract(null, &foo_struct);
+
 }
 
 /// A minimal factory for creating structs. The type passed should be an interface. Register structs
@@ -1705,7 +1748,8 @@ const FooBar = struct {
                 .deinitFn = deinit,
             },
         };
-        try imprint(argz, ImprintOptions{}, self);
+        //const imprint = try argz.imprint(FooBar);
+        //self.bar = imprint.bar;
         return &self.interface;
     }
 
