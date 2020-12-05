@@ -898,6 +898,7 @@ pub const ZNode = struct {
 
     fn imprint_(self: *const Self, comptime T: type, allocator: ?*std.mem.Allocator) ImprintError!T {
         const TI = @typeInfo(T);
+
         switch (TI) {
             .Void => {},
             .Bool => {
@@ -914,7 +915,7 @@ pub const ZNode = struct {
                 };
             },
             .Int, .ComptimeInt => {
-                const is_signed = (TI == .Int and TI.Int.is_signed) or (TI == .ComptimeInt and TI.CompTimeInt.is_signed);
+                const is_signed = (TI == .Int and TI.Int.signedness == .signed) or (TI == .ComptimeInt and TI.CompTimeInt.is_signed);
                 switch (self.value) {
                     .Int => |n| {
                         if (is_signed) {
@@ -967,8 +968,12 @@ pub const ZNode = struct {
 
                     const found = self.findNextChild(iter, .{ .String = field.name });
                     if (found) |child_node| {
-                        if (child_node.child) |value_node| {
-                            @field(result, field.name) = try value_node.imprint_(field.field_type, allocator);
+                        if (@typeInfo(field.field_type) == .Struct) {
+                            @field(result, field.name) = try child_node.imprint_(field.field_type, allocator);
+                        } else {
+                            if (child_node.child) |value_node| {
+                                @field(result, field.name) = try value_node.imprint_(field.field_type, allocator);
+                            }
                         }
 
                         // Found, set the iterator here.
@@ -1521,7 +1526,6 @@ test "parsing into nodes" {
     ;
 }
 
-
 test "node conforming imprint" {
     const testing = std.testing;
 
@@ -1596,6 +1600,10 @@ test "node nonconforming imprint" {
 test "imprint allocations" {
     const testing = std.testing;
 
+    const Embedded = struct {
+        name: []const u8 = "",
+        count: u32 = 0,
+    };
     const SysAlloc = struct {
         name: []const u8 = "",
         params: ?*const ZNode = null,
@@ -1604,6 +1612,7 @@ test "imprint allocations" {
         max_particles: ?*i32 = null,
         texture: []const u8 = "",
         systems: []SysAlloc = undefined,
+        embedded: Embedded = .{},
     };
     const text =
         \\max_particles: 100
@@ -1615,6 +1624,10 @@ test "imprint allocations" {
         \\      some,stuff,hehe
         \\  : name:Fire
         \\    params
+        \\embedded:
+        \\  name: creator
+        \\  count: 12345
+        \\
     ;
     var tree = ZTree(1, 100){};
     var node = try tree.appendText(text);
@@ -1622,7 +1635,7 @@ test "imprint allocations" {
     var imprint = try node.imprintAlloc(FooAlloc, testing.allocator);
     testing.expectEqual(@as(i32, 100), imprint.result.max_particles.?.*);
     for (imprint.result.systems) |sys, i| {
-        testing.expectEqualSlices(u8, ([_][]const u8{"Emitter", "Fire"})[i], sys.name);
+        testing.expectEqualSlices(u8, ([_][]const u8{ "Emitter", "Fire" })[i], sys.name);
     }
     imprint.arena.deinit();
 }
@@ -1641,7 +1654,7 @@ test "extract" {
         foo: ?i32 = null,
         hi: []const u8 = "lol",
         arr: [2]FooNested = [_]FooNested{.{}} ** 2,
-        slice: []const FooNested = &[_]FooNested{.{}, .{}, .{}},
+        slice: []const FooNested = &[_]FooNested{ .{}, .{}, .{} },
         ptr: *const FooNested = &FooNested{},
         a_node: *ZNode = undefined,
     }{
@@ -1650,7 +1663,6 @@ test "extract" {
 
     var tree = ZTree(1, 100){};
     try tree.extract(null, &foo_struct);
-
 }
 
 /// A minimal factory for creating structs. The type passed should be an interface. Register structs
