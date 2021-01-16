@@ -1122,9 +1122,6 @@ pub const ZNode = struct {
     fn _stringifyPretty(self: *const Self, out_stream: anytype) @TypeOf(out_stream).Error!void {
         try self.value.stringify(out_stream);
         try out_stream.writeAll(":");
-        if (self.getChildCount() > 1) {
-            try out_stream.writeAll("\n  ");
-        }
         var depth: isize = 0;
         var last_depth: isize = 1;
         var iter = self;
@@ -1147,8 +1144,9 @@ pub const ZNode = struct {
                 }
                 try out_stream.writeAll("\n");
                 try out_stream.writeByteNTimes(' ', 2 * @bitCast(usize, depth));
-            } else if (depth > 1) {
-                try out_stream.writeAll(",");
+            } else {
+                try out_stream.writeAll("\n");
+                try out_stream.writeByteNTimes(' ', 2 * @bitCast(usize, depth));
             }
             try n.value.stringify(out_stream);
         }
