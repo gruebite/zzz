@@ -622,7 +622,7 @@ pub const ZValue = union(enum) {
     pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
         switch (self) {
             .Null => try std.fmt.format(writer, ".Null", .{}),
-            .String => try std.fmt.format(writer, ".String({})", .{self.String}),
+            .String => try std.fmt.format(writer, ".String({s})", .{self.String}),
             .Int => try std.fmt.format(writer, ".Int({})", .{self.Int}),
             .Float => try std.fmt.format(writer, ".Float({})", .{self.Float}),
             .Bool => try std.fmt.format(writer, ".Bool({})", .{self.Bool}),
@@ -804,7 +804,7 @@ pub const ZNode = struct {
     }
 
     /// Finds the nth child node with a specific tag.
-    pub fn findNthAny(self: *const Self, nth: usize, tag: @TagType(ZValue)) ?*ZNode {
+    pub fn findNthAny(self: *const Self, nth: usize, tag: std.meta.Tag(ZValue)) ?*ZNode {
         var count: usize = 0;
         var iter: ?*ZNode = self.child;
         while (iter) |n| {
@@ -836,7 +836,7 @@ pub const ZNode = struct {
     }
 
     /// Traverses descendants until a node with the tag is found.
-    pub fn findNthAnyDescendant(self: *const Self, nth: usize, value: @TagType(ZValue)) ?*ZNode {
+    pub fn findNthAnyDescendant(self: *const Self, nth: usize, value: std.meta.Tag(ZValue)) ?*ZNode {
         var depth: isize = 0;
         var count: usize = 0;
         var iter: *const ZNode = self;
