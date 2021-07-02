@@ -12,9 +12,8 @@ pub fn createPackage(comptime root: []const u8) std.build.Pkg {
 const pkgs = struct {
     const zzz = std.build.Pkg{
         .name = "zzz",
-        .path = "src/main.zig",
-        .dependencies = &[_]std.build.Pkg{
-        },
+        .path = .{ .path = "src/main.zig" },
+        .dependencies = &[_]std.build.Pkg{},
     };
 };
 
