@@ -466,18 +466,18 @@ test "parsing slice output" {
     ;
     var idx: usize = 0;
     var stream = StreamingParser.init();
-    testing.expectEqualSlices(u8, "mp", try testNextTextOrError(&stream, &idx, text));
-    testing.expectEqualSlices(u8, "10", try testNextTextOrError(&stream, &idx, text));
-    testing.expectEqualSlices(u8, "sy", try testNextTextOrError(&stream, &idx, text));
-    testing.expectEqualSlices(u8, "", try testNextTextOrError(&stream, &idx, text));
-    testing.expectEqualSlices(u8, "n", try testNextTextOrError(&stream, &idx, text));
-    testing.expectEqualSlices(u8, "en", try testNextTextOrError(&stream, &idx, text));
-    testing.expectEqualSlices(u8, "m", try testNextTextOrError(&stream, &idx, text));
-    testing.expectEqualSlices(u8, "sc", try testNextTextOrError(&stream, &idx, text));
-    testing.expectEqualSlices(u8, "10", try testNextTextOrError(&stream, &idx, text));
-    testing.expectEqualSlices(u8, "g", try testNextTextOrError(&stream, &idx, text));
-    testing.expectEqualSlices(u8, "", try testNextTextOrError(&stream, &idx, text));
-    testing.expectEqualSlices(u8, "hi", try testNextTextOrError(&stream, &idx, text));
+    try testing.expectEqualSlices(u8, "mp", try testNextTextOrError(&stream, &idx, text));
+    try testing.expectEqualSlices(u8, "10", try testNextTextOrError(&stream, &idx, text));
+    try testing.expectEqualSlices(u8, "sy", try testNextTextOrError(&stream, &idx, text));
+    try testing.expectEqualSlices(u8, "", try testNextTextOrError(&stream, &idx, text));
+    try testing.expectEqualSlices(u8, "n", try testNextTextOrError(&stream, &idx, text));
+    try testing.expectEqualSlices(u8, "en", try testNextTextOrError(&stream, &idx, text));
+    try testing.expectEqualSlices(u8, "m", try testNextTextOrError(&stream, &idx, text));
+    try testing.expectEqualSlices(u8, "sc", try testNextTextOrError(&stream, &idx, text));
+    try testing.expectEqualSlices(u8, "10", try testNextTextOrError(&stream, &idx, text));
+    try testing.expectEqualSlices(u8, "g", try testNextTextOrError(&stream, &idx, text));
+    try testing.expectEqualSlices(u8, "", try testNextTextOrError(&stream, &idx, text));
+    try testing.expectEqualSlices(u8, "hi", try testNextTextOrError(&stream, &idx, text));
 }
 
 fn testNextLevelOrError(stream: *StreamingParser, idx: *usize, text: []const u8) !usize {
@@ -511,18 +511,18 @@ test "parsing depths" {
     var idx: usize = 0;
     var stream = StreamingParser.init();
 
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 1);
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 2);
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 1);
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 2);
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 3);
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 4);
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 4);
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 3);
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 4);
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 4);
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 2);
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 3);
+    try testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 1);
+    try testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 2);
+    try testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 1);
+    try testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 2);
+    try testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 3);
+    try testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 4);
+    try testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 4);
+    try testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 3);
+    try testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 4);
+    try testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 4);
+    try testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 2);
+    try testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 3);
 }
 
 /// Parses the stream, outputting ZNodeTokens which reference the text.
@@ -1417,18 +1417,18 @@ test "stable after error" {
     var tree = ZTree(2, 6){};
     // Using 1 root, 3 nodes (+1 for root).
     _ = try tree.appendText("foo:bar");
-    testing.expectEqual(@as(usize, 1), tree.root_count);
-    testing.expectEqual(@as(usize, 3), tree.node_count);
-    testing.expectError(ZError.TreeFull, tree.appendText("bar:foo:baz:ha:ha"));
-    testing.expectEqual(@as(usize, 1), tree.root_count);
-    testing.expectEqual(@as(usize, 3), tree.node_count);
+    try testing.expectEqual(@as(usize, 1), tree.root_count);
+    try testing.expectEqual(@as(usize, 3), tree.node_count);
+    try testing.expectError(ZError.TreeFull, tree.appendText("bar:foo:baz:ha:ha"));
+    try testing.expectEqual(@as(usize, 1), tree.root_count);
+    try testing.expectEqual(@as(usize, 3), tree.node_count);
     // Using +1 root, +2 node = 2 roots, 5 nodes.
     _ = try tree.appendText("bar");
-    testing.expectEqual(@as(usize, 2), tree.root_count);
-    testing.expectEqual(@as(usize, 5), tree.node_count);
-    testing.expectError(ZError.TooManyRoots, tree.appendText("foo"));
-    testing.expectEqual(@as(usize, 2), tree.root_count);
-    testing.expectEqual(@as(usize, 5), tree.node_count);
+    try testing.expectEqual(@as(usize, 2), tree.root_count);
+    try testing.expectEqual(@as(usize, 5), tree.node_count);
+    try testing.expectError(ZError.TooManyRoots, tree.appendText("foo"));
+    try testing.expectEqual(@as(usize, 2), tree.root_count);
+    try testing.expectEqual(@as(usize, 5), tree.node_count);
 }
 
 test "static tree" {
@@ -1449,15 +1449,15 @@ test "static tree" {
     node.convertStrings();
 
     var iter = node.findNextChild(null, .{ .String = "max_particles" });
-    testing.expect(iter != null);
+    try testing.expect(iter != null);
     iter = node.findNextChild(iter, .{ .String = "texture" });
-    testing.expect(iter != null);
+    try testing.expect(iter != null);
     iter = node.findNextChild(iter, .{ .String = "max_particles" });
-    testing.expect(iter != null);
+    try testing.expect(iter != null);
     iter = node.findNextChild(iter, .{ .String = "systems" });
-    testing.expect(iter != null);
+    try testing.expect(iter != null);
     iter = node.findNextChild(iter, .{ .Int = 42 });
-    testing.expect(iter == null);
+    try testing.expect(iter == null);
 }
 
 test "node appending and searching" {
@@ -1473,33 +1473,33 @@ test "node appending and searching" {
     var floatChild = try tree.addNode(root, .{ .Float = 3.14 });
     var boolChild = try tree.addNode(root, .{ .Bool = true });
 
-    testing.expectEqual(@as(usize, 6), root.getChildCount());
-    testing.expect(root.findNth(0, .Null) != null);
+    try testing.expectEqual(@as(usize, 6), root.getChildCount());
+    try testing.expect(root.findNth(0, .Null) != null);
 
-    testing.expect(root.findNth(0, .{ .String = "Hello" }) != null);
-    testing.expect(root.findNth(0, .{ .String = "foo" }) != null);
-    testing.expect(root.findNth(1, .{ .String = "Hello" }) == null);
-    testing.expect(root.findNth(1, .{ .String = "foo" }) == null);
-    testing.expect(root.findNthAny(0, .String) != null);
-    testing.expect(root.findNthAny(1, .String) != null);
-    testing.expect(root.findNthAny(2, .String) == null);
+    try testing.expect(root.findNth(0, .{ .String = "Hello" }) != null);
+    try testing.expect(root.findNth(0, .{ .String = "foo" }) != null);
+    try testing.expect(root.findNth(1, .{ .String = "Hello" }) == null);
+    try testing.expect(root.findNth(1, .{ .String = "foo" }) == null);
+    try testing.expect(root.findNthAny(0, .String) != null);
+    try testing.expect(root.findNthAny(1, .String) != null);
+    try testing.expect(root.findNthAny(2, .String) == null);
 
-    testing.expect(root.findNth(0, .{ .Int = 42 }) != null);
-    testing.expect(root.findNth(0, .{ .Int = 41 }) == null);
-    testing.expect(root.findNth(1, .{ .Int = 42 }) == null);
-    testing.expect(root.findNthAny(0, .Int) != null);
-    testing.expect(root.findNthAny(1, .Int) == null);
+    try testing.expect(root.findNth(0, .{ .Int = 42 }) != null);
+    try testing.expect(root.findNth(0, .{ .Int = 41 }) == null);
+    try testing.expect(root.findNth(1, .{ .Int = 42 }) == null);
+    try testing.expect(root.findNthAny(0, .Int) != null);
+    try testing.expect(root.findNthAny(1, .Int) == null);
 
-    testing.expect(root.findNth(0, .{ .Float = 3.14 }) != null);
-    testing.expect(root.findNth(0, .{ .Float = 3.13 }) == null);
-    testing.expect(root.findNth(1, .{ .Float = 3.14 }) == null);
-    testing.expect(root.findNthAny(0, .Float) != null);
-    testing.expect(root.findNthAny(1, .Float) == null);
+    try testing.expect(root.findNth(0, .{ .Float = 3.14 }) != null);
+    try testing.expect(root.findNth(0, .{ .Float = 3.13 }) == null);
+    try testing.expect(root.findNth(1, .{ .Float = 3.14 }) == null);
+    try testing.expect(root.findNthAny(0, .Float) != null);
+    try testing.expect(root.findNthAny(1, .Float) == null);
 
-    testing.expect(root.findNthAny(0, .Bool) != null);
-    testing.expect(root.findNth(0, .{ .Bool = true }) != null);
-    testing.expect(root.findNthAny(1, .Bool) == null);
-    testing.expect(root.findNth(1, .{ .Bool = true }) == null);
+    try testing.expect(root.findNthAny(0, .Bool) != null);
+    try testing.expect(root.findNth(0, .{ .Bool = true }) != null);
+    try testing.expect(root.findNthAny(1, .Bool) == null);
+    try testing.expect(root.findNth(1, .{ .Bool = true }) == null);
 }
 
 test "parsing into nodes" {
@@ -1562,13 +1562,13 @@ test "node conforming imprint" {
     node.convertStrings();
 
     //const example = try node.imprint(ConformingStruct);
-    //testing.expectEqual(@as(i32, 100), example.max_particles.?);
-    //testing.expectEqualSlices(u8, "circle", example.texture);
-    //testing.expect(null != example.systems[0]);
-    //testing.expect(null != example.systems[1]);
-    //testing.expectEqual(@as(?ConformingSubStruct, null), example.systems[2]);
-    //testing.expectEqual(ConformingEnum.Foo, example.en.?);
-    //testing.expectEqualSlices(u8, "params", example.systems[0].?.params.?.value.String);
+    //try testing.expectEqual(@as(i32, 100), example.max_particles.?);
+    //try testing.expectEqualSlices(u8, "circle", example.texture);
+    //try testing.expect(null != example.systems[0]);
+    //try testing.expect(null != example.systems[1]);
+    //try testing.expectEqual(@as(?ConformingSubStruct, null), example.systems[2]);
+    //try testing.expectEqual(ConformingEnum.Foo, example.en.?);
+    //try testing.expectEqualSlices(u8, "params", example.systems[0].?.params.?.value.String);
 }
 
 test "node nonconforming imprint" {
@@ -1592,7 +1592,7 @@ test "node nonconforming imprint" {
     var node = try tree.appendText(text);
     node.convertStrings();
 
-    testing.expectError(ImprintError.ExpectedBoolNode, node.imprint(NonConformingStruct));
+    try testing.expectError(ImprintError.ExpectedBoolNode, node.imprint(NonConformingStruct));
 }
 
 test "imprint allocations" {
@@ -1631,9 +1631,9 @@ test "imprint allocations" {
     var node = try tree.appendText(text);
     node.convertStrings();
     var imprint = try node.imprintAlloc(FooAlloc, testing.allocator);
-    testing.expectEqual(@as(i32, 100), imprint.result.max_particles.?.*);
+    try testing.expectEqual(@as(i32, 100), imprint.result.max_particles.?.*);
     for (imprint.result.systems) |sys, i| {
-        testing.expectEqualSlices(u8, ([_][]const u8{ "Emitter", "Fire" })[i], sys.name);
+        try testing.expectEqualSlices(u8, ([_][]const u8{ "Emitter", "Fire" })[i], sys.name);
     }
     imprint.arena.deinit();
 }
