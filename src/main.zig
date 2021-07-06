@@ -1365,6 +1365,17 @@ pub fn ZTree(comptime R: usize, comptime S: usize) type {
                 .Enum => {
                     _ = try self.addNode(root, .{ .String = std.meta.tagName(from_ptr.*) });
                 },
+                .Union => {
+                    const info = @typeInfo(T).Union;
+                    if (info.tag_type) |UnionTagType| {
+                        inline for (info.fields) |field| {
+                            if (from_ptr.* == @field(UnionTagType, field.name)) {
+                                var field_node = try self.addNode(root, .{ .String = field.name });
+                                try self.extract(field_node, &@field(from_ptr.*, field.name));
+                            }
+                        }
+                    } else return error.InvalidType;
+                },
                 .Optional => |opt_info| {
                     _ = opt_info;
                     if (from_ptr.* != null) {
