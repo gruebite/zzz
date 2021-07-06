@@ -580,6 +580,7 @@ pub const ZValue = union(enum) {
                 var need_escape = false;
                 var found = [_]bool{false} ** chars_count;
                 var level: usize = 0;
+                _ = level;
                 for ("\"\n\t\r,:;") |ch, i| {
                     const f = find(u8, self.String, ch);
                     if (f != null) {
@@ -620,6 +621,8 @@ pub const ZValue = union(enum) {
 
     ///
     pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        _ = fmt;
+        _ = options;
         switch (self) {
             .Null => try std.fmt.format(writer, ".Null", .{}),
             .String => try std.fmt.format(writer, ".String({s})", .{self.String}),
@@ -837,6 +840,7 @@ pub const ZNode = struct {
 
     /// Traverses descendants until a node with the tag is found.
     pub fn findNthAnyDescendant(self: *const Self, nth: usize, value: std.meta.Tag(ZValue)) ?*ZNode {
+        _ = value;
         var depth: isize = 0;
         var count: usize = 0;
         var iter: *const ZNode = self;
@@ -878,8 +882,8 @@ pub const ZNode = struct {
             }
             // Try to cast to numbers, then true/false checks, then string.
             const slice = c.value.String;
-            const integer = std.fmt.parseInt(i32, slice, 10) catch |_| {
-                const float = std.fmt.parseFloat(f32, slice) catch |_| {
+            const integer = std.fmt.parseInt(i32, slice, 10) catch  {
+                const float = std.fmt.parseFloat(f32, slice) catch  {
                     if (std.mem.eql(u8, "true", slice)) {
                         c.value = ZValue{ .Bool = true };
                     } else if (std.mem.eql(u8, "false", slice)) {
@@ -933,7 +937,7 @@ pub const ZNode = struct {
             .Enum => {
                 switch (self.value) {
                     .Int => |int| {
-                        return std.meta.intToEnum(T, int) catch |_| {
+                        return std.meta.intToEnum(T, int) catch {
                             return ImprintError.FailedToConvertIntToEnum;
                         };
                     },
@@ -961,6 +965,7 @@ pub const ZNode = struct {
                 var result: T = .{};
 
                 inline for (struct_info.fields) |field, i| {
+                    _ = i;
                     // Skip underscores.
                     if (field.name[0] == '_') {
                         continue;
@@ -1328,6 +1333,7 @@ pub fn ZTree(comptime R: usize, comptime S: usize) type {
         /// Debug print the tree and all of its roots.
         pub fn show(self: *const Self) void {
             for (self.rootSlice()) |rt, i| {
+                _ = i;
                 rt.show();
             }
         }
@@ -1360,14 +1366,17 @@ pub fn ZTree(comptime R: usize, comptime S: usize) type {
                     _ = try self.addNode(root, .{ .String = std.meta.tagName(from_ptr.*) });
                 },
                 .Optional => |opt_info| {
+                    _ = opt_info;
                     if (from_ptr.* != null) {
                         return self.extract(root, &from_ptr.*.?);
                     }
                 },
                 .Struct => |struct_info| {
                     var iter: ?*const ZNode = null;
+                    _ = iter;
 
                     inline for (struct_info.fields) |field, i| {
+                        _ = i;
                         if (field.name[field.name.len - 1] == '_') {
                             continue;
                         }
@@ -1466,12 +1475,12 @@ test "node appending and searching" {
     var tree = ZTree(1, 100){};
     var root = try tree.addNode(null, .Null);
 
-    var nullChild = try tree.addNode(root, .Null);
-    var stringChild = try tree.addNode(root, .{ .String = "Hello" });
-    var fooChild = try tree.addNode(root, .{ .String = "foo" });
-    var integerChild = try tree.addNode(root, .{ .Int = 42 });
-    var floatChild = try tree.addNode(root, .{ .Float = 3.14 });
-    var boolChild = try tree.addNode(root, .{ .Bool = true });
+    _ = try tree.addNode(root, .Null);
+    _ = try tree.addNode(root, .{ .String = "Hello" });
+    _ = try tree.addNode(root, .{ .String = "foo" });
+    _ = try tree.addNode(root, .{ .Int = 42 });
+    _ = try tree.addNode(root, .{ .Float = 3.14 });
+    _ = try tree.addNode(root, .{ .Bool = true });
 
     testing.expectEqual(@as(usize, 6), root.getChildCount());
     testing.expect(root.findNth(0, .Null) != null);
@@ -1504,6 +1513,7 @@ test "node appending and searching" {
 
 test "parsing into nodes" {
     const testing = std.testing;
+    _ = testing;
     const text1 =
         \\elements: fire,water,air,earth
         \\subelements:
@@ -1512,25 +1522,30 @@ test "parsing into nodes" {
         \\  air: spirit
         \\  earth: [[metal]]
     ;
+    _ = text1;
     const text2 =
         \\elements:fire,water,air,earth;
         \\subelements:fire:lightning;water:blood;ice,air:spirit,;earth:metal;;
     ;
+    _ = text2;
     const text =
         \\name:wizard;
         \\stats
         \\  : health:10
         \\    mana:30
     ;
+    _ = text;
 }
 
 test "node conforming imprint" {
     const testing = std.testing;
+    _ = testing;
 
     const ConformingEnum = enum {
         Foo,
     };
     comptime var x: i32 = 0;
+    _ = x;
 
     const ConformingSubStruct = struct {
         name: []const u8 = "default",
@@ -1544,6 +1559,8 @@ test "node conforming imprint" {
         en: ?ConformingEnum = null,
         exists: ?void = null,
     };
+
+    _ = ConformingStruct;
 
     const text =
         \\max_particles: 100
@@ -1640,6 +1657,7 @@ test "imprint allocations" {
 
 test "extract" {
     const testing = std.testing;
+    _ = testing;
     var text_tree = ZTree(1, 100){};
     var text_root = try text_tree.appendText("foo:bar:baz;;42");
 
@@ -1750,6 +1768,7 @@ const FooBar = struct {
     bar: i32 = 0,
 
     pub fn zinit(allocator: *std.mem.Allocator, argz: *const ZNode) !*FooInterface {
+        _ = argz;
         var self = try allocator.create(Self);
         self.* = .{
             .interface = .{
@@ -1770,6 +1789,7 @@ const FooBar = struct {
 
     pub fn foo(interface: *FooInterface) void {
         var self = @fieldParentPtr(FooBar, "interface", interface);
+        _ = self;
     }
 };
 
