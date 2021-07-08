@@ -466,18 +466,18 @@ test "parsing slice output" {
     ;
     var idx: usize = 0;
     var stream = StreamingParser.init();
-    testing.expectEqualSlices(u8, "mp", try testNextTextOrError(&stream, &idx, text));
-    testing.expectEqualSlices(u8, "10", try testNextTextOrError(&stream, &idx, text));
-    testing.expectEqualSlices(u8, "sy", try testNextTextOrError(&stream, &idx, text));
-    testing.expectEqualSlices(u8, "", try testNextTextOrError(&stream, &idx, text));
-    testing.expectEqualSlices(u8, "n", try testNextTextOrError(&stream, &idx, text));
-    testing.expectEqualSlices(u8, "en", try testNextTextOrError(&stream, &idx, text));
-    testing.expectEqualSlices(u8, "m", try testNextTextOrError(&stream, &idx, text));
-    testing.expectEqualSlices(u8, "sc", try testNextTextOrError(&stream, &idx, text));
-    testing.expectEqualSlices(u8, "10", try testNextTextOrError(&stream, &idx, text));
-    testing.expectEqualSlices(u8, "g", try testNextTextOrError(&stream, &idx, text));
-    testing.expectEqualSlices(u8, "", try testNextTextOrError(&stream, &idx, text));
-    testing.expectEqualSlices(u8, "hi", try testNextTextOrError(&stream, &idx, text));
+    try testing.expectEqualSlices(u8, "mp", try testNextTextOrError(&stream, &idx, text));
+    try testing.expectEqualSlices(u8, "10", try testNextTextOrError(&stream, &idx, text));
+    try testing.expectEqualSlices(u8, "sy", try testNextTextOrError(&stream, &idx, text));
+    try testing.expectEqualSlices(u8, "", try testNextTextOrError(&stream, &idx, text));
+    try testing.expectEqualSlices(u8, "n", try testNextTextOrError(&stream, &idx, text));
+    try testing.expectEqualSlices(u8, "en", try testNextTextOrError(&stream, &idx, text));
+    try testing.expectEqualSlices(u8, "m", try testNextTextOrError(&stream, &idx, text));
+    try testing.expectEqualSlices(u8, "sc", try testNextTextOrError(&stream, &idx, text));
+    try testing.expectEqualSlices(u8, "10", try testNextTextOrError(&stream, &idx, text));
+    try testing.expectEqualSlices(u8, "g", try testNextTextOrError(&stream, &idx, text));
+    try testing.expectEqualSlices(u8, "", try testNextTextOrError(&stream, &idx, text));
+    try testing.expectEqualSlices(u8, "hi", try testNextTextOrError(&stream, &idx, text));
 }
 
 fn testNextLevelOrError(stream: *StreamingParser, idx: *usize, text: []const u8) !usize {
@@ -511,18 +511,18 @@ test "parsing depths" {
     var idx: usize = 0;
     var stream = StreamingParser.init();
 
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 1);
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 2);
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 1);
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 2);
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 3);
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 4);
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 4);
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 3);
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 4);
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 4);
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 2);
-    testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 3);
+    try testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 1);
+    try testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 2);
+    try testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 1);
+    try testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 2);
+    try testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 3);
+    try testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 4);
+    try testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 4);
+    try testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 3);
+    try testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 4);
+    try testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 4);
+    try testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 2);
+    try testing.expectEqual(try testNextLevelOrError(&stream, &idx, text), 3);
 }
 
 /// Parses the stream, outputting ZNodeTokens which reference the text.
@@ -579,7 +579,6 @@ pub const ZValue = union(enum) {
                 const chars_count = @sizeOf(@TypeOf(chars));
                 var need_escape = false;
                 var found = [_]bool{false} ** chars_count;
-                var level: usize = 0;
                 for ("\"\n\t\r,:;") |ch, i| {
                     const f = find(u8, self.String, ch);
                     if (f != null) {
@@ -620,6 +619,8 @@ pub const ZValue = union(enum) {
 
     ///
     pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        _ = fmt;
+        _ = options;
         switch (self) {
             .Null => try std.fmt.format(writer, ".Null", .{}),
             .String => try std.fmt.format(writer, ".String({s})", .{self.String}),
@@ -836,7 +837,7 @@ pub const ZNode = struct {
     }
 
     /// Traverses descendants until a node with the tag is found.
-    pub fn findNthAnyDescendant(self: *const Self, nth: usize, value: std.meta.Tag(ZValue)) ?*ZNode {
+    pub fn findNthAnyDescendant(self: *const Self, nth: usize, tag: std.meta.Tag(ZValue)) ?*ZNode {
         var depth: isize = 0;
         var count: usize = 0;
         var iter: *const ZNode = self;
@@ -878,8 +879,8 @@ pub const ZNode = struct {
             }
             // Try to cast to numbers, then true/false checks, then string.
             const slice = c.value.String;
-            const integer = std.fmt.parseInt(i32, slice, 10) catch |_| {
-                const float = std.fmt.parseFloat(f32, slice) catch |_| {
+            const integer = std.fmt.parseInt(i32, slice, 10) catch {
+                const float = std.fmt.parseFloat(f32, slice) catch {
                     if (std.mem.eql(u8, "true", slice)) {
                         c.value = ZValue{ .Bool = true };
                     } else if (std.mem.eql(u8, "false", slice)) {
@@ -933,7 +934,7 @@ pub const ZNode = struct {
             .Enum => {
                 switch (self.value) {
                     .Int => |int| {
-                        return std.meta.intToEnum(T, int) catch |_| {
+                        return std.meta.intToEnum(T, int) catch {
                             return ImprintError.FailedToConvertIntToEnum;
                         };
                     },
@@ -960,7 +961,7 @@ pub const ZNode = struct {
                 var iter: ?*const ZNode = null;
                 var result: T = .{};
 
-                inline for (struct_info.fields) |field, i| {
+                inline for (struct_info.fields) |field| {
                     // Skip underscores.
                     if (field.name[0] == '_') {
                         continue;
@@ -1327,7 +1328,7 @@ pub fn ZTree(comptime R: usize, comptime S: usize) type {
 
         /// Debug print the tree and all of its roots.
         pub fn show(self: *const Self) void {
-            for (self.rootSlice()) |rt, i| {
+            for (self.rootSlice()) |rt| {
                 rt.show();
             }
         }
@@ -1359,15 +1360,13 @@ pub fn ZTree(comptime R: usize, comptime S: usize) type {
                 .Enum => {
                     _ = try self.addNode(root, .{ .String = std.meta.tagName(from_ptr.*) });
                 },
-                .Optional => |opt_info| {
+                .Optional => {
                     if (from_ptr.* != null) {
                         return self.extract(root, &from_ptr.*.?);
                     }
                 },
                 .Struct => |struct_info| {
-                    var iter: ?*const ZNode = null;
-
-                    inline for (struct_info.fields) |field, i| {
+                    inline for (struct_info.fields) |field| {
                         if (field.name[field.name.len - 1] == '_') {
                             continue;
                         }
@@ -1417,18 +1416,18 @@ test "stable after error" {
     var tree = ZTree(2, 6){};
     // Using 1 root, 3 nodes (+1 for root).
     _ = try tree.appendText("foo:bar");
-    testing.expectEqual(@as(usize, 1), tree.root_count);
-    testing.expectEqual(@as(usize, 3), tree.node_count);
-    testing.expectError(ZError.TreeFull, tree.appendText("bar:foo:baz:ha:ha"));
-    testing.expectEqual(@as(usize, 1), tree.root_count);
-    testing.expectEqual(@as(usize, 3), tree.node_count);
+    try testing.expectEqual(@as(usize, 1), tree.root_count);
+    try testing.expectEqual(@as(usize, 3), tree.node_count);
+    try testing.expectError(ZError.TreeFull, tree.appendText("bar:foo:baz:ha:ha"));
+    try testing.expectEqual(@as(usize, 1), tree.root_count);
+    try testing.expectEqual(@as(usize, 3), tree.node_count);
     // Using +1 root, +2 node = 2 roots, 5 nodes.
     _ = try tree.appendText("bar");
-    testing.expectEqual(@as(usize, 2), tree.root_count);
-    testing.expectEqual(@as(usize, 5), tree.node_count);
-    testing.expectError(ZError.TooManyRoots, tree.appendText("foo"));
-    testing.expectEqual(@as(usize, 2), tree.root_count);
-    testing.expectEqual(@as(usize, 5), tree.node_count);
+    try testing.expectEqual(@as(usize, 2), tree.root_count);
+    try testing.expectEqual(@as(usize, 5), tree.node_count);
+    try testing.expectError(ZError.TooManyRoots, tree.appendText("foo"));
+    try testing.expectEqual(@as(usize, 2), tree.root_count);
+    try testing.expectEqual(@as(usize, 5), tree.node_count);
 }
 
 test "static tree" {
@@ -1449,15 +1448,15 @@ test "static tree" {
     node.convertStrings();
 
     var iter = node.findNextChild(null, .{ .String = "max_particles" });
-    testing.expect(iter != null);
+    try testing.expect(iter != null);
     iter = node.findNextChild(iter, .{ .String = "texture" });
-    testing.expect(iter != null);
+    try testing.expect(iter != null);
     iter = node.findNextChild(iter, .{ .String = "max_particles" });
-    testing.expect(iter != null);
+    try testing.expect(iter != null);
     iter = node.findNextChild(iter, .{ .String = "systems" });
-    testing.expect(iter != null);
+    try testing.expect(iter != null);
     iter = node.findNextChild(iter, .{ .Int = 42 });
-    testing.expect(iter == null);
+    try testing.expect(iter == null);
 }
 
 test "node appending and searching" {
@@ -1466,62 +1465,40 @@ test "node appending and searching" {
     var tree = ZTree(1, 100){};
     var root = try tree.addNode(null, .Null);
 
-    var nullChild = try tree.addNode(root, .Null);
-    var stringChild = try tree.addNode(root, .{ .String = "Hello" });
-    var fooChild = try tree.addNode(root, .{ .String = "foo" });
-    var integerChild = try tree.addNode(root, .{ .Int = 42 });
-    var floatChild = try tree.addNode(root, .{ .Float = 3.14 });
-    var boolChild = try tree.addNode(root, .{ .Bool = true });
+    _ = try tree.addNode(root, .Null);
+    _ = try tree.addNode(root, .{ .String = "Hello" });
+    _ = try tree.addNode(root, .{ .String = "foo" });
+    _ = try tree.addNode(root, .{ .Int = 42 });
+    _ = try tree.addNode(root, .{ .Float = 3.14 });
+    _ = try tree.addNode(root, .{ .Bool = true });
 
-    testing.expectEqual(@as(usize, 6), root.getChildCount());
-    testing.expect(root.findNth(0, .Null) != null);
+    try testing.expectEqual(@as(usize, 6), root.getChildCount());
+    try testing.expect(root.findNth(0, .Null) != null);
 
-    testing.expect(root.findNth(0, .{ .String = "Hello" }) != null);
-    testing.expect(root.findNth(0, .{ .String = "foo" }) != null);
-    testing.expect(root.findNth(1, .{ .String = "Hello" }) == null);
-    testing.expect(root.findNth(1, .{ .String = "foo" }) == null);
-    testing.expect(root.findNthAny(0, .String) != null);
-    testing.expect(root.findNthAny(1, .String) != null);
-    testing.expect(root.findNthAny(2, .String) == null);
+    try testing.expect(root.findNth(0, .{ .String = "Hello" }) != null);
+    try testing.expect(root.findNth(0, .{ .String = "foo" }) != null);
+    try testing.expect(root.findNth(1, .{ .String = "Hello" }) == null);
+    try testing.expect(root.findNth(1, .{ .String = "foo" }) == null);
+    try testing.expect(root.findNthAny(0, .String) != null);
+    try testing.expect(root.findNthAny(1, .String) != null);
+    try testing.expect(root.findNthAny(2, .String) == null);
 
-    testing.expect(root.findNth(0, .{ .Int = 42 }) != null);
-    testing.expect(root.findNth(0, .{ .Int = 41 }) == null);
-    testing.expect(root.findNth(1, .{ .Int = 42 }) == null);
-    testing.expect(root.findNthAny(0, .Int) != null);
-    testing.expect(root.findNthAny(1, .Int) == null);
+    try testing.expect(root.findNth(0, .{ .Int = 42 }) != null);
+    try testing.expect(root.findNth(0, .{ .Int = 41 }) == null);
+    try testing.expect(root.findNth(1, .{ .Int = 42 }) == null);
+    try testing.expect(root.findNthAny(0, .Int) != null);
+    try testing.expect(root.findNthAny(1, .Int) == null);
 
-    testing.expect(root.findNth(0, .{ .Float = 3.14 }) != null);
-    testing.expect(root.findNth(0, .{ .Float = 3.13 }) == null);
-    testing.expect(root.findNth(1, .{ .Float = 3.14 }) == null);
-    testing.expect(root.findNthAny(0, .Float) != null);
-    testing.expect(root.findNthAny(1, .Float) == null);
+    try testing.expect(root.findNth(0, .{ .Float = 3.14 }) != null);
+    try testing.expect(root.findNth(0, .{ .Float = 3.13 }) == null);
+    try testing.expect(root.findNth(1, .{ .Float = 3.14 }) == null);
+    try testing.expect(root.findNthAny(0, .Float) != null);
+    try testing.expect(root.findNthAny(1, .Float) == null);
 
-    testing.expect(root.findNthAny(0, .Bool) != null);
-    testing.expect(root.findNth(0, .{ .Bool = true }) != null);
-    testing.expect(root.findNthAny(1, .Bool) == null);
-    testing.expect(root.findNth(1, .{ .Bool = true }) == null);
-}
-
-test "parsing into nodes" {
-    const testing = std.testing;
-    const text1 =
-        \\elements: fire,water,air,earth
-        \\subelements:
-        \\  fire: lightning
-        \\  water: blood; ice
-        \\  air: spirit
-        \\  earth: [[metal]]
-    ;
-    const text2 =
-        \\elements:fire,water,air,earth;
-        \\subelements:fire:lightning;water:blood;ice,air:spirit,;earth:metal;;
-    ;
-    const text =
-        \\name:wizard;
-        \\stats
-        \\  : health:10
-        \\    mana:30
-    ;
+    try testing.expect(root.findNthAny(0, .Bool) != null);
+    try testing.expect(root.findNth(0, .{ .Bool = true }) != null);
+    try testing.expect(root.findNthAny(1, .Bool) == null);
+    try testing.expect(root.findNth(1, .{ .Bool = true }) == null);
 }
 
 test "node conforming imprint" {
@@ -1530,7 +1507,6 @@ test "node conforming imprint" {
     const ConformingEnum = enum {
         Foo,
     };
-    comptime var x: i32 = 0;
 
     const ConformingSubStruct = struct {
         name: []const u8 = "default",
@@ -1561,14 +1537,14 @@ test "node conforming imprint" {
     var node = try tree.appendText(text);
     node.convertStrings();
 
-    //const example = try node.imprint(ConformingStruct);
-    //testing.expectEqual(@as(i32, 100), example.max_particles.?);
-    //testing.expectEqualSlices(u8, "circle", example.texture);
-    //testing.expect(null != example.systems[0]);
-    //testing.expect(null != example.systems[1]);
-    //testing.expectEqual(@as(?ConformingSubStruct, null), example.systems[2]);
-    //testing.expectEqual(ConformingEnum.Foo, example.en.?);
-    //testing.expectEqualSlices(u8, "params", example.systems[0].?.params.?.value.String);
+    const example = try node.imprint(ConformingStruct);
+    try testing.expectEqual(@as(i32, 100), example.max_particles.?);
+    try testing.expectEqualSlices(u8, "circle", example.texture);
+    try testing.expect(null != example.systems[0]);
+    try testing.expect(null != example.systems[1]);
+    try testing.expectEqual(@as(?ConformingSubStruct, null), example.systems[2]);
+    try testing.expectEqual(ConformingEnum.Foo, example.en.?);
+    try testing.expectEqualSlices(u8, "params", example.systems[0].?.params.?.value.String);
 }
 
 test "node nonconforming imprint" {
@@ -1592,7 +1568,7 @@ test "node nonconforming imprint" {
     var node = try tree.appendText(text);
     node.convertStrings();
 
-    testing.expectError(ImprintError.ExpectedBoolNode, node.imprint(NonConformingStruct));
+    try testing.expectError(ImprintError.ExpectedBoolNode, node.imprint(NonConformingStruct));
 }
 
 test "imprint allocations" {
@@ -1631,15 +1607,14 @@ test "imprint allocations" {
     var node = try tree.appendText(text);
     node.convertStrings();
     var imprint = try node.imprintAlloc(FooAlloc, testing.allocator);
-    testing.expectEqual(@as(i32, 100), imprint.result.max_particles.?.*);
+    try testing.expectEqual(@as(i32, 100), imprint.result.max_particles.?.*);
     for (imprint.result.systems) |sys, i| {
-        testing.expectEqualSlices(u8, ([_][]const u8{ "Emitter", "Fire" })[i], sys.name);
+        try testing.expectEqualSlices(u8, ([_][]const u8{ "Emitter", "Fire" })[i], sys.name);
     }
     imprint.arena.deinit();
 }
 
 test "extract" {
-    const testing = std.testing;
     var text_tree = ZTree(1, 100){};
     var text_root = try text_tree.appendText("foo:bar:baz;;42");
 
@@ -1749,7 +1724,7 @@ const FooBar = struct {
     interface: FooInterface = .{},
     bar: i32 = 0,
 
-    pub fn zinit(allocator: *std.mem.Allocator, argz: *const ZNode) !*FooInterface {
+    pub fn zinit(allocator: *std.mem.Allocator, _: *const ZNode) !*FooInterface {
         var self = try allocator.create(Self);
         self.* = .{
             .interface = .{
@@ -1769,7 +1744,7 @@ const FooBar = struct {
     }
 
     pub fn foo(interface: *FooInterface) void {
-        var self = @fieldParentPtr(FooBar, "interface", interface);
+        _ = @fieldParentPtr(FooBar, "interface", interface);
     }
 };
 
