@@ -44,15 +44,15 @@ pub fn main() !void {
 
     var monster = try node.imprint(Monster);
 
-    std.debug.print("Name: {}\n", .{monster.name});
-    std.debug.print("Health: {}\n", .{monster.health});
+    std.debug.print("Name: {s}\n", .{monster.name});
+    std.debug.print("Health: {d}\n", .{monster.health});
     var i: usize = 0;
     while (monster.attacks[i]) |att| : (i += 1) {
-        std.debug.print("  Attack: {}\n", .{att.name});
-        std.debug.print("    Types: {} {}\n", .{ att.types[0], att.types[1] });
-        std.debug.print("    Damage: {} {}\n", .{ att.damage[0], att.damage[1] });
-        std.debug.print("    Range: {}\n", .{att.range});
-        std.debug.print("    Description: {}\n\n", .{att.description});
+        std.debug.print("  Attack: {s}\n", .{att.name});
+        std.debug.print("    Types: {s} {}\n", .{ att.types[0], att.types[1] });
+        std.debug.print("    Damage: {d} {}\n", .{ att.damage[0], att.damage[1] });
+        std.debug.print("    Range: {d}\n", .{att.range});
+        std.debug.print("    Description: {s}\n\n", .{att.description});
     }
     //monster.complex.?.show();
 }
