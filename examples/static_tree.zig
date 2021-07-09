@@ -1,4 +1,3 @@
-
 pub const std = @import("std");
 pub const zzz = @import("zzz");
 
@@ -18,7 +17,7 @@ pub fn main() !void {
 
     std.debug.print("Number of nodes: {}\n", .{tree.node_count});
     // This function searches all the node's descendants.
-    std.debug.print("Kobold's CON: {}\n", .{node.findNthDescendant(0, .{.String = "con"}).?.child.?.value.Int});
+    std.debug.print("Kobold's CON: {}\n", .{node.findNthDescendant(0, .{ .String = "con" }).?.child.?.value.Int});
 
     // The JSON example has exactly 161 nodes.
     var big_tree = zzz.ZTree(1, 161){};
@@ -30,7 +29,7 @@ pub fn main() !void {
     var depth: isize = 0;
     var iter = root;
     while (iter.next(&depth)) |n| : (iter = n) {
-        if (n.value.equals(.{.String = "servlet-name"})) {
+        if (n.value.equals(.{ .String = "servlet-name" })) {
             if (n.child) |child| {
                 std.debug.print("servlet-name: {}\n", .{child.value});
             }

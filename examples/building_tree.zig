@@ -1,4 +1,3 @@
-
 pub const std = @import("std");
 pub const zzz = @import("zzz");
 
@@ -11,11 +10,11 @@ pub fn main() !void {
     var root = try tree.addNode(null, .Null);
 
     // Add some properties.
-    _ = try tree.addNode(try tree.addNode(root, .{.String = "name"}), .{.String = "Foobar"});
+    _ = try tree.addNode(try tree.addNode(root, .{ .String = "name" }), .{ .String = "Foobar" });
     // Build an array by add children to the same parent.
-    var stats = try tree.addNode(root, .{.String = "stats"});
-    _ = try tree.addNode(try tree.addNode(stats, .{.String = "health"}), .{.Int = 10});
-    _ = try tree.addNode(try tree.addNode(stats, .{.String = "mana"}), .{.Int = 30});
+    var stats = try tree.addNode(root, .{ .String = "stats" });
+    _ = try tree.addNode(try tree.addNode(stats, .{ .String = "health" }), .{ .Int = 10 });
+    _ = try tree.addNode(try tree.addNode(stats, .{ .String = "mana" }), .{ .Int = 30 });
 
     root.show();
     // Basic output.
