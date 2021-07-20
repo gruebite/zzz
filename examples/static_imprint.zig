@@ -4,16 +4,14 @@ pub const zzz = @import("zzz");
 const dragon = @embedFile("../example-data/dragon.zzz");
 
 // Default transformer can handle enums by name or integer.
-pub const AttackType = enum {
-    Slashing, Fire, Magic
-};
+pub const AttackType = enum { Slashing, Fire, Magic };
 
 // Imprinting performs zero allocations, so any arrays must be fixed.
 pub const MAX_ATTACKS = 10;
 
 pub const MAX_TYPES = 2;
 
-fn foo() void { }
+fn foo() void {}
 
 pub const Attack = struct {
     name: []const u8 = "",
