@@ -253,6 +253,5 @@ a node
 ```
 Output:
 ```
-null -> "a node"
-     -> "a child"
+null -> "a node" -> "a child"
 ```

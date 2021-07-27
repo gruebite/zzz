@@ -82,12 +82,11 @@
 //! Comments begin with # and run up to the end of the line. Their indentation follows the same
 //! rules as nodes.
 //! \\# A comment
-//! \\a nodetend
+//! \\a node
 //! \\  # Another comment
 //! \\  a sibling
 //! Output:
-//! null -> "a node"
-//!      -> "a sibling"
+//! null -> "a node" -> "a sibling"
 
 const std = @import("std");
 
