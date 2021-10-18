@@ -739,7 +739,7 @@ pub const ZNode = struct {
     }
 
     /// Returns the nth child's value. Or null if neither the node or child exist.
-    pub fn getChildValue(self: *const Self, nth: usize) ?Value {
+    pub fn getChildValue(self: *const Self, nth: usize) ?ZValue {
         var count: usize = 0;
         var iter: ?*ZNode = self.child;
         while (iter) |n| {
