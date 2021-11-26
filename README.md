@@ -2,23 +2,23 @@
 
 Simple and boring human readable data format for Zig.
 
-zzz syntax describes a tree of strings. It has little syntactic noise and is really easy to implement. The spec does not force any specific rules for escaping or number parsing, and the current implementation optionally uses Zig's standard library for converting numbers. Nodes in the tree are slices into the text.
+zzz syntax describes a tree of strings.  It has little syntactic noise and is really easy to implement. The spec does not force any specific rules for escaping or number parsing by design.  Nodes in the tree are text slices.
 
-zzz's focus is to be a simple and lightweight format. This library implements a static tree which has zero allocations. Here's an example reading a tree:
-
-**Note:** This implementation is being iterated on while I use this for another project. API stability isn't a guarantee quite yet, and will also be subject to changes as Zig changes.
+zzz's focus is to be a simple and lightweight format. This library implements two trees: a static tree which has zero allocations, and a dynamic tree which manages slice and node allocations. Here's an example using the static tree:
 
 ```js
-// 1 is the max number of roots, 100 is the max number of nodes.
-var tree = zzz.ZTree(1, 100){};
-var root = try tree.appendText("foo:bar");
-// Root is always null.
-assert(root.value == .Null);
-assert(root.findNth(0, .{.String = "foo"}) != null);
-assert(root.findNthDescendant(0, .{.String = "bar"}) != null);
-// Output to a single line.
-root.stringify(std.io.getStdOut().writer());
+// 100 is the max number of nodes.
+var tree = zzz.ZStaticTree(100){};
+try zzz.appendText(&tree, "foo:bar");
+// There is always a root, and its value is empty.
+assert(tree.root.value == "");
+assert(tree.root.findNth(0, "foo") != null);
+assert(tree.root.findNthDescendant(0, "bar") != null);
+// Print the tree to standard out.
+tree.root.show();
 ```
+
+**Note:** This implementation is being iterated on while I use this for another project. API stability isn't a guarantee quite yet, and will also be subject to changes as Zig changes.
 
 ## Use-cases
 
@@ -122,7 +122,7 @@ For more examples see the source comments and tests.
 
 # Sparse spec
 
-zzz text describes a tree of strings. Special characters (and spaces) are used to go up and down the tree. The tree has an implicit null root node.
+zzz text describes a tree of strings. Special characters (and spaces) are used to go up and down the tree. The tree has an implicit empty root node.
 
 ### Descending the tree:
 ```

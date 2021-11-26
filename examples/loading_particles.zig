@@ -4,9 +4,9 @@ pub const zzz = @import("zzz");
 const particles = @embedFile("../example-data/particles.zzz");
 
 pub fn main() !void {
-    var tree = zzz.ZTree(1, 1000){};
-    const root = try tree.appendText(particles);
+    var tree = zzz.ZStaticTree(1000){};
+    try zzz.appendText(&tree, null, particles);
 
-    try root.stringifyPretty(std.io.getStdOut().writer());
+    tree.root.show();
     std.debug.print("Node count: {}\n", .{tree.node_count});
 }
