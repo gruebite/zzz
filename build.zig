@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const Builder = std.build.Builder;
 
 pub fn createPackage(comptime root: []const u8) std.build.Pkg {
@@ -44,12 +45,12 @@ const examples = [_]Example{
 pub fn build(b: *Builder) !void {
     const mode = b.standardReleaseOptions();
     const target = b.standardTargetOptions(.{
-        .default_target = if (std.builtin.os.tag == .windows)
+        .default_target = if (builtin.os.tag == .windows)
             std.zig.CrossTarget.parse(.{ .arch_os_abi = "native-native-gnu" }) catch unreachable
-        else if (std.builtin.os.tag == .linux)
+        else if (builtin.os.tag == .linux)
             std.zig.CrossTarget.fromTarget(.{
-                .cpu = std.builtin.cpu,
-                .os = std.builtin.os,
+                .cpu = builtin.cpu,
+                .os = builtin.os,
                 .abi = .musl,
             })
         else
