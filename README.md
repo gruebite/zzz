@@ -12,7 +12,7 @@ var tree = zzz.ZStaticTree(100){};
 try zzz.appendText(&tree, "foo:bar");
 // There is always a root, and its value is empty.
 assert(tree.root.value == "");
-assert(tree.root.findNth(0, "foo") != null);
+assert(tree.root.findNthChild(0, "foo") != null);
 assert(tree.root.findNthDescendant(0, "bar") != null);
 // Print the tree to standard out.
 tree.root.show();
