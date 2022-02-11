@@ -1121,3 +1121,106 @@ test "dynamic tree" {
 
     try testing.expectEqual(@as(usize, 12), tree0.node_count);
 }
+
+/// Tries to constuct an instance of given type by parsing a tree node
+/// slices (i.e. strings) are copied, free the result with `zzz.free`
+pub fn parseTreeAlloc(comptime T: type, allocator: std.mem.Allocator, node: ZNode) !T {
+    var res: T = undefined;
+    switch (T) {
+        []const u8 => {
+            if (node.child) |value_node| {
+                res = try allocator.dupe(u8, value_node.value);
+            } else {
+                res = try allocator.dupe(u8, node.value);
+            }
+        },
+        else => switch (@typeInfo(T)) {
+            .Struct => |s_info| {
+                var child_iter: ?*ZNode = null;
+                while (node.nextChild(child_iter)) |child| : (child_iter = child) {
+                    inline for (s_info.fields) |field| {
+                        if (std.mem.eql(u8, field.name, child.value)) {
+                            const field_value = try parseTreeAlloc(field.field_type, allocator, child.*);
+                            @field(res, field.name) = field_value;
+                        }
+                    }
+                }
+            },
+            .Pointer => |p_info| switch (p_info.size) {
+                .Slice => {
+                    const count = node.getChildCount();
+
+                    res = try allocator.alloc(p_info.child, count);
+
+                    var i: usize = 0;
+                    var child_iter: ?*ZNode = null;
+                    while (node.nextChild(child_iter)) |child| : (child_iter = child) {
+                        res[i] = try parseTreeAlloc(p_info.child, allocator, child.*);
+                        i += 1;
+                    }
+                },
+                else => @compileError("Unsupported type " ++ @typeName(T)),
+            },
+            else => @compileError("Unsupported type " ++ @typeName(T)),
+        },
+    }
+    return res;
+}
+
+/// Frees memory allocated by parseTreeAlloc
+pub fn free(allocator: std.mem.Allocator, value: anytype) void {
+    const T = @TypeOf(value);
+    switch (T) {
+        []const u8 => {
+            allocator.free(value);
+        },
+        else => switch (@typeInfo(T)) {
+            .Struct => |s_info| {
+                inline for (s_info.fields) |field| {
+                    free(allocator, @field(value, field.name));
+                }
+            },
+            .Pointer => |p_info| switch (p_info.size) {
+                .Slice => {
+                    for (value) |elem| free(allocator, elem);
+                    allocator.free(value);
+                },
+                else => @compileError("Unsupported type " ++ @typeName(T)),
+            },
+            else => @compileError("Unsupported type " ++ @typeName(T)),
+        },
+    }
+}
+
+test "parseTreeAlloc/free" {
+    const testing = std.testing;
+
+    var test_tree = ZStaticTree(1000){};
+    try appendText(
+        &test_tree,
+        null,
+        \\a: "testing, testing..."
+        \\bs:
+        \\  1
+        \\  2
+        \\  3
+        ,
+    );
+
+    const foo = try parseTreeAlloc(
+        struct {
+            a: []const u8,
+            bs: [][]const u8,
+        },
+        testing.allocator,
+        test_tree.root,
+    );
+    defer free(testing.allocator, foo);
+
+    try testing.expectEqualSlices(u8, "testing, testing...", foo.a);
+
+    try testing.expectEqual(@as(usize, 3), foo.bs.len);
+    try testing.expectEqualSlices(u8, "1", foo.bs[0]);
+    try testing.expectEqualSlices(u8, "2", foo.bs[1]);
+    try testing.expectEqualSlices(u8, "3", foo.bs[2]);
+}
