@@ -1204,6 +1204,11 @@ test "parseTreeAlloc/free" {
         \\  1
         \\  2
         \\  3
+        \\c:
+        \\  foo: "foo'd"
+        \\  bar: "bar'd"
+        \\  baz: "baz'd"
+        \\
         ,
     );
 
@@ -1211,6 +1216,11 @@ test "parseTreeAlloc/free" {
         struct {
             a: []const u8,
             bs: [][]const u8,
+            c: struct{
+                foo: []const u8,
+                bar: []const u8,
+                baz: []const u8,
+            },
         },
         testing.allocator,
         test_tree.root,
@@ -1219,8 +1229,12 @@ test "parseTreeAlloc/free" {
 
     try testing.expectEqualSlices(u8, "testing, testing...", foo.a);
 
-    try testing.expectEqual(@as(usize, 3), foo.bs.len);
+    try testing.expect(foo.bs.len == 3);
     try testing.expectEqualSlices(u8, "1", foo.bs[0]);
     try testing.expectEqualSlices(u8, "2", foo.bs[1]);
     try testing.expectEqualSlices(u8, "3", foo.bs[2]);
+
+    try testing.expectEqualSlices(u8, "foo'd", foo.c.foo);
+    try testing.expectEqualSlices(u8, "bar'd", foo.c.bar);
+    try testing.expectEqualSlices(u8, "baz'd", foo.c.baz);
 }
