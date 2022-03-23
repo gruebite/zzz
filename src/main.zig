@@ -908,7 +908,10 @@ test "node appending and searching" {
     _ = try tree.appendValue(root, "3.14");
     _ = try tree.appendValue(root, "true");
 
-    try testing.expectEqual(@as(usize, 6), root.getChildCount());
+    const nested = try tree.appendValue(root, "nested");
+    _ = try tree.appendValue(nested, "descendent");
+
+    try testing.expectEqual(@as(usize, 7), root.getChildCount());
     try testing.expect(root.findNthChild(0, "") != null);
 
     try testing.expect(root.findNthChild(0, "Hello") != null);
@@ -926,6 +929,18 @@ test "node appending and searching" {
 
     try testing.expect(root.findNthChild(0, "true") != null);
     try testing.expect(root.findNthChild(1, "true") == null);
+
+    try testing.expect(root.findChild("Hello") != null);
+    try testing.expect(root.findChild("foo") != null);
+    try testing.expect(root.findChild("42") != null);
+    try testing.expect(root.findChild("3.14") != null);
+    try testing.expect(root.findChild("true") != null);
+    try testing.expect(root.findChild("nested") != null);
+
+    try testing.expect(root.findChild("descendent") == null);
+
+    try testing.expect(root.findDescendant("nested") != null);
+    try testing.expect(root.findDescendant("descendent") != null);
 }
 
 test "appending node" {
@@ -1009,7 +1024,7 @@ pub const ZDynamicTree = struct {
     }
 };
 
-const ZError = ZDynamicTreeError || ZStaticTreeError;
+const ZError = ZDynamicTreeError || ZStaticTreeError || ParseTreeError;
 
 /// Adds text under a parent node.  Passing null will put the text under root.
 pub fn appendText(tree: anytype, parent: ?*ZNode, text: []const u8) ZError!void {
@@ -1120,4 +1135,208 @@ test "dynamic tree" {
     _ = try tree0.appendAnytype(null, 42);
 
     try testing.expectEqual(@as(usize, 12), tree0.node_count);
+}
+
+pub const ParseTreeError = error{
+    InvalidData,
+    MissingField,
+} || std.mem.Allocator.Error;
+
+/// Tries to constuct an instance of given type by parsing a tree node
+/// slices (i.e. strings) are copied, free the result with `zzz.free`
+pub fn parseTreeAlloc(
+    comptime T: type,
+    allocator: std.mem.Allocator,
+    node: ZNode,
+) ParseTreeError!T {
+    return switch (T) {
+        []const u8 => allocator.dupe(
+            u8,
+            if (node.child) |child| child.value else node.value,
+        ),
+        else => switch (@typeInfo(T)) {
+            .Struct => parseTreeStructAlloc(T, allocator, node),
+            .Pointer => parseTreeSliceAlloc(T, allocator, node),
+            .Enum => parseTreeEnum(T, node),
+            else => @compileError("Unsupported type: " ++ @typeName(T)),
+        },
+    };
+}
+
+pub fn parseTreeStructAlloc(
+    comptime T: type,
+    allocator: std.mem.Allocator,
+    node: ZNode,
+) ParseTreeError!T {
+    if (@typeInfo(T) != .Struct) {
+        @compileError("Expected struct type, got " ++ @typeName(T));
+    }
+
+    var res: T = undefined;
+    var missing_field = false;
+    inline for (std.meta.fields(T)) |field| {
+        if (node.findChild(field.name)) |value_node| {
+            const field_value = try parseTreeAlloc(
+                field.field_type,
+                allocator,
+                value_node.*,
+            );
+            @field(res, field.name) = field_value;
+        } else {
+            missing_field = true;
+        }
+    }
+
+    return if (missing_field) ParseTreeError.MissingField else res;
+}
+
+pub fn parseTreeSliceAlloc(
+    comptime T: type,
+    allocator: std.mem.Allocator,
+    node: ZNode,
+) ParseTreeError!T {
+    const type_info = @typeInfo(T);
+
+    if (type_info != .Pointer) {
+        @compileError("Expected slice type, got " ++ @typeName(T));
+    }
+
+    switch (type_info.Pointer.size) {
+        .Slice => {
+            const count = node.getChildCount();
+
+            var elems = try allocator.alloc(type_info.Pointer.child, count);
+            errdefer allocator.free(elems);
+
+            if (node.child) |child| {
+                var i: u32 = 0;
+                var iter: ?*ZNode = child;
+                while (iter) |cur| : (iter = iter.?.sibling) {
+                    elems[i] = try parseTreeAlloc(
+                        type_info.Pointer.child,
+                        allocator,
+                        cur.*,
+                    );
+                    i += 1;
+                }
+
+                if (i != count) {
+                    return ParseTreeError.InvalidData;
+                }
+            } else {
+                return ParseTreeError.InvalidData;
+            }
+
+            return elems;
+        },
+        else => @compileError("Expected slice type, got " ++ @typeName(T)),
+    }
+}
+
+pub fn parseTreeEnum(comptime T: type, node: ZNode) ParseTreeError!T {
+    if (@typeInfo(T) != .Enum) @compileError("Expected enum type, got " ++ @typeName(T));
+
+    const value_node = node.child orelse {
+        return ParseTreeError.InvalidData;
+    };
+
+    inline for (std.meta.fields(T)) |variant| {
+        if (std.mem.eql(u8, value_node.value, variant.name)) {
+            return @field(T, variant.name);
+        }
+    }
+
+    return ParseTreeError.InvalidData;
+}
+
+/// Frees memory allocated by parseTreeAlloc
+pub fn free(allocator: std.mem.Allocator, value: anytype) void {
+    const T = @TypeOf(value);
+    switch (T) {
+        []const u8 => {
+            allocator.free(value);
+        },
+        else => switch (@typeInfo(T)) {
+            .Struct => |s_info| {
+                inline for (s_info.fields) |field| {
+                    free(allocator, @field(value, field.name));
+                }
+            },
+            .Pointer => |p_info| switch (p_info.size) {
+                .Slice => {
+                    for (value) |elem| free(allocator, elem);
+                    allocator.free(value);
+                },
+                else => @compileError("Unsupported type: " ++ @typeName(T)),
+            },
+            .Enum => {},
+            else => @compileError("Unsupported type: " ++ @typeName(T)),
+        },
+    }
+}
+
+test "parseTreeAlloc/free" {
+    const testing = std.testing;
+
+    var test_tree = ZStaticTree(1000){};
+    try appendText(
+        &test_tree,
+        null,
+        \\a: "testing, testing..."
+        \\bs:
+        \\  1
+        \\  2
+        \\  3
+        \\
+        \\c: fourth
+        \\
+        \\d:
+        \\  foo: "foo'd"
+        \\  bar: "bar'd"
+        \\  baz: "baz'd"
+        \\
+        ,
+    );
+
+    const foo = try parseTreeAlloc(
+        struct {
+            a: []const u8,
+            bs: [][]const u8,
+            c: enum {
+                first,
+                second,
+                third,
+                fourth,
+            },
+            d: struct {
+                foo: []const u8,
+                bar: []const u8,
+                baz: []const u8,
+            },
+        },
+        testing.allocator,
+        test_tree.root,
+    );
+    defer free(testing.allocator, foo);
+
+    try testing.expectEqualSlices(u8, "testing, testing...", foo.a);
+
+    try testing.expectEqual(@as(usize, 3), foo.bs.len);
+    try testing.expectEqualSlices(u8, "1", foo.bs[0]);
+    try testing.expectEqualSlices(u8, "2", foo.bs[1]);
+    try testing.expectEqualSlices(u8, "3", foo.bs[2]);
+
+    try testing.expectEqual(@TypeOf(foo.c).fourth, foo.c);
+
+    try testing.expectEqualSlices(u8, "foo'd", foo.d.foo);
+    try testing.expectEqualSlices(u8, "bar'd", foo.d.bar);
+    try testing.expectEqualSlices(u8, "baz'd", foo.d.baz);
+
+    try testing.expectError(ParseTreeError.MissingField, parseTreeAlloc(
+        struct {
+            something: enum { different },
+        },
+        testing.allocator,
+        test_tree.root,
+    ));
 }
