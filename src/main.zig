@@ -908,7 +908,10 @@ test "node appending and searching" {
     _ = try tree.appendValue(root, "3.14");
     _ = try tree.appendValue(root, "true");
 
-    try testing.expectEqual(@as(usize, 6), root.getChildCount());
+    const nested = try tree.appendValue(root, "nested");
+    _ = try tree.appendValue(nested, "descendent");
+
+    try testing.expectEqual(@as(usize, 7), root.getChildCount());
     try testing.expect(root.findNthChild(0, "") != null);
 
     try testing.expect(root.findNthChild(0, "Hello") != null);
@@ -926,6 +929,18 @@ test "node appending and searching" {
 
     try testing.expect(root.findNthChild(0, "true") != null);
     try testing.expect(root.findNthChild(1, "true") == null);
+
+    try testing.expect(root.findChild("Hello") != null);
+    try testing.expect(root.findChild("foo") != null);
+    try testing.expect(root.findChild("42") != null);
+    try testing.expect(root.findChild("3.14") != null);
+    try testing.expect(root.findChild("true") != null);
+    try testing.expect(root.findChild("nested") != null);
+
+    try testing.expect(root.findChild("descendent") == null);
+
+    try testing.expect(root.findDescendant("nested") != null);
+    try testing.expect(root.findDescendant("descendent") != null);
 }
 
 test "appending node" {
