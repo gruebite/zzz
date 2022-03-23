@@ -1161,6 +1161,17 @@ pub fn parseTreeAlloc(comptime T: type, allocator: std.mem.Allocator, node: ZNod
                 },
                 else => @compileError("Unsupported type " ++ @typeName(T)),
             },
+            .Enum => |e_info| {
+                var depth: isize = 0;
+                const value_node = node.next(&depth).?;
+                std.debug.assert(depth == 1);
+
+                inline for (e_info.fields) |variant| {
+                    if (std.mem.eql(u8, value_node.value, variant.name)) {
+                        res = @field(T, variant.name);
+                    }
+                }
+            },
             else => @compileError("Unsupported type " ++ @typeName(T)),
         },
     }
@@ -1187,6 +1198,7 @@ pub fn free(allocator: std.mem.Allocator, value: anytype) void {
                 },
                 else => @compileError("Unsupported type " ++ @typeName(T)),
             },
+            .Enum => {},
             else => @compileError("Unsupported type " ++ @typeName(T)),
         },
     }
@@ -1204,11 +1216,13 @@ test "parseTreeAlloc/free" {
         \\  1
         \\  2
         \\  3
+        \\
         \\c:
         \\  foo: "foo'd"
         \\  bar: "bar'd"
         \\  baz: "baz'd"
         \\
+        \\d: fourth
         ,
     );
 
@@ -1216,10 +1230,16 @@ test "parseTreeAlloc/free" {
         struct {
             a: []const u8,
             bs: [][]const u8,
-            c: struct{
+            c: struct {
                 foo: []const u8,
                 bar: []const u8,
                 baz: []const u8,
+            },
+            d: enum {
+                first,
+                second,
+                third,
+                fourth,
             },
         },
         testing.allocator,
@@ -1237,4 +1257,6 @@ test "parseTreeAlloc/free" {
     try testing.expectEqualSlices(u8, "foo'd", foo.c.foo);
     try testing.expectEqualSlices(u8, "bar'd", foo.c.bar);
     try testing.expectEqualSlices(u8, "baz'd", foo.c.baz);
+
+    try testing.expectEqual(@TypeOf(foo.d).fourth, foo.d);
 }
