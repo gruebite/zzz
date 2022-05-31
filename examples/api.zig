@@ -35,8 +35,6 @@ fn node_functions() !void {
     // Find children/descendants.
     std.debug.print("node_functions():findChild(): {s}\n", .{tree.root.findChild("biz").?.value});
     std.debug.print("node_functions():findDescendant(): {s}\n", .{tree.root.findDescendant("boom").?.value});
-    std.debug.print("node_functions():findNthChild(): {any}\n", .{tree.root.findNthChild(1, "biz")});
-    std.debug.print("node_functions():findNthDescendant(): {any}\n", .{tree.root.findNthDescendant(1, "boom")});
 
     // Output.
     tree.root.show();

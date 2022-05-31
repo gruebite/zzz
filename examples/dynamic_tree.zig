@@ -16,7 +16,7 @@ pub fn main() !void {
 
     std.debug.print("Number of nodes: {}\n", .{tree.node_count});
     // This function searches all the node's descendants.
-    std.debug.print("Kobold's CON: {s}\n", .{tree.root.findNthDescendant(0, "con").?.child.?.value});
+    std.debug.print("Kobold's CON: {s}\n", .{tree.root.findDescendant("con").?.child.?.value});
 
     var big_tree = zzz.ZDynamicTree.init(std.testing.allocator);
     defer big_tree.deinit();

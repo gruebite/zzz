@@ -658,25 +658,16 @@ pub const ZNode = struct {
         return count;
     }
 
-    /// Finds the nth child node with a specific value.
-    pub fn findNthChild(self: *const Self, nth: usize, value: []const u8) ?*ZNode {
-        var count: usize = 0;
+    /// Finds the first child with the specified value.
+    pub fn findChild(self: *const Self, value: []const u8) ?*ZNode {
         var iter: ?*ZNode = self.child orelse return null;
         while (iter) |n| {
             if (mem.eql(u8, n.value, value)) {
-                if (count == nth) {
-                    return n;
-                }
-                count += 1;
+                return n;
             }
             iter = n.sibling;
         }
         return null;
-    }
-
-    /// Finds the first child with the specified value.
-    pub fn findChild(self: *const Self, value: []const u8) ?*ZNode {
-        return self.findNthChild(0, value);
     }
 
     /// Finds the next child after the given iterator. This is good for when you can guess the order
@@ -702,23 +693,14 @@ pub const ZNode = struct {
     }
 
     /// Traverses descendants until a node with the specific value is found.
-    pub fn findNthDescendant(self: *const Self, nth: usize, value: []const u8) ?*ZNode {
-        var count: usize = 0;
+    pub fn findDescendant(self: *const Self, value: []const u8) ?*ZNode {
         var iter: ?*const ZNode = null;
         while (self.nextDescendant(iter, null)) |n| : (iter = n) {
             if (mem.eql(u8, n.value, value)) {
-                if (count == nth) {
-                    return n;
-                }
-                count += 1;
+                return n;
             }
         }
         return null;
-    }
-
-    /// Traverses descendants until a node with the specific value is found.
-    pub fn findDescendant(self: *const Self, value: []const u8) ?*ZNode {
-        return self.findNthDescendant(0, value);
     }
 
     /// Returns true if node has more than one descendant (child, grandchild, etc).
@@ -909,23 +891,18 @@ test "node appending and searching" {
     _ = try tree.appendValue(root, "true");
 
     try testing.expectEqual(@as(usize, 6), root.getChildCount());
-    try testing.expect(root.findNthChild(0, "") != null);
+    try testing.expect(root.findChild("") != null);
 
-    try testing.expect(root.findNthChild(0, "Hello") != null);
-    try testing.expect(root.findNthChild(0, "foo") != null);
-    try testing.expect(root.findNthChild(1, "Hello") == null);
-    try testing.expect(root.findNthChild(1, "foo") == null);
+    try testing.expect(root.findChild("Hello") != null);
+    try testing.expect(root.findChild("foo") != null);
 
-    try testing.expect(root.findNthChild(0, "42") != null);
-    try testing.expect(root.findNthChild(0, "41") == null);
-    try testing.expect(root.findNthChild(1, "42") == null);
+    try testing.expect(root.findChild("42") != null);
+    try testing.expect(root.findChild("41") == null);
 
-    try testing.expect(root.findNthChild(0, "3.14") != null);
-    try testing.expect(root.findNthChild(0, "3.13") == null);
-    try testing.expect(root.findNthChild(1, "3.14") == null);
+    try testing.expect(root.findChild("3.14") != null);
+    try testing.expect(root.findChild("3.13") == null);
 
-    try testing.expect(root.findNthChild(0, "true") != null);
-    try testing.expect(root.findNthChild(1, "true") == null);
+    try testing.expect(root.findChild("true") != null);
 }
 
 test "appending node" {
