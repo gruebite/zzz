@@ -2,7 +2,7 @@
 
 Simple and boring human readable data format for Zig.
 
-zzz syntax describes a tree of strings.  It has little syntactic noise and is really easy to implement. The spec does not force any specific rules for escaping or number parsing by design.  Nodes in the tree are text slices.
+zzz syntax describes a tree of strings.  It has little syntactic noise and is really easy to implement. The spec does not force any specific rules for escaping or number parsing by design.  Nodes in the tree are string slices.
 
 zzz's focus is to be a simple and lightweight format. This library implements two trees: a static tree which has zero allocations, and a dynamic tree which manages slice and node allocations. Here's an example using the static tree:
 
@@ -58,10 +58,10 @@ stats:
   wis: 7: -2
   cha: 8: -1
 
-# ; is used to go up in the tree. Here we ascend up from the "ft" meta node
+# ; is used to go up in the tree. Here we ascend up from the "ft" node
 senses: darkvision:60:ft;; passive perception:8
 languages: common, draconic
-challenge: 1:8
+challenge: 1/8
 
 # Multline strings follow the same rules as Lua's. The first newline on an empty line is skipped
 abilities:
@@ -120,7 +120,7 @@ For more examples see the source comments and tests.
 
 - **kak**: https://github.com/katesuyu/zzz.kak
 
-# Sparse spec
+# Spec
 
 zzz text describes a tree of strings. Special characters (and spaces) are used to go up and down the tree. The tree has an implicit empty root node.
 
@@ -176,7 +176,7 @@ null -> "parent" -> "child"
                  -> "sibling"
 ```
 
-### You can only go one level deeper than the previous lines depth. Anything more is an error:
+### You can only go one level deeper than the previous line's depth. Anything more is an error:
 ```
 parent:child
     sibling
@@ -196,15 +196,6 @@ Output:
 ```
 null -> "parent" -> "child"
                  -> "sibling"
-```
-
-### This implementation supports integers (i32), floats (f32), and booleans:
-```
-string:42:42.0:true::
-```
-Output:
-```
-null -> "string" -> 42 -> 42.0 -> true -> null
 ```
 
 ### Strings are trimmed:

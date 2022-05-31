@@ -14,7 +14,7 @@ stats:
   cha: 8: -1
 senses: darkvision:60:ft;; passive perception:8
 languages: common, draconic
-challenge: 1:8
+challenge: 1/8
 abilities
   sunlight sensitivity: [[
 While in sunlight, the kobold has disadvantage on attack
