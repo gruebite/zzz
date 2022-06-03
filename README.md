@@ -8,7 +8,7 @@ zzz's focus is to be a simple and lightweight format. This library implements tw
 
 ```js
 // 100 is the max number of nodes.
-var tree = zzz.ZStaticTree(100){};
+var tree = zzz.StaticTree(100){};
 try zzz.appendText(&tree, "foo:bar");
 // There is always a root, and its value is empty.
 assert(tree.root.value == "");

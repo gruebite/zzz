@@ -3,7 +3,7 @@ pub const zzz = @import("zzz");
 
 pub fn main() !void {
     // Creates a static tree that can contain 100 nodes total.
-    var tree = zzz.ZStaticTree(100){};
+    var tree = zzz.StaticTree(100){};
 
     _ = try tree.appendValue(try tree.appendValue(null, ""), "baz");
 
@@ -17,7 +17,7 @@ pub fn main() !void {
     tree.root.show();
 
     // Creates a dynamic tree that can contain any number of nodes.
-    var dtree = zzz.ZDynamicTree.init(std.testing.allocator);
+    var dtree = zzz.DynamicTree.init(std.testing.allocator);
     defer dtree.deinit();
 
     _ = try dtree.appendAnytype(null, true);

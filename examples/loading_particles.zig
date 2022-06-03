@@ -4,7 +4,7 @@ pub const zzz = @import("zzz");
 const particles = @embedFile("../example-data/particles.zzz");
 
 pub fn main() !void {
-    var tree = zzz.ZStaticTree(1000){};
+    var tree = zzz.StaticTree(1000){};
     try zzz.appendText(&tree, null, particles);
 
     tree.root.show();

@@ -2,10 +2,10 @@ pub const std = @import("std");
 pub const zzz = @import("zzz");
 
 fn node_functions() !void {
-    var tree = zzz.ZStaticTree(8){};
+    var tree = zzz.StaticTree(8){};
     try zzz.appendText(&tree, null, "foo:bar;biz:baz,boom");
 
-    var iter: ?*zzz.ZNode = null;
+    var iter: ?*zzz.Node = null;
 
     // Iterate nodes in the tree starting from some node.
     iter = &tree.root;
@@ -41,7 +41,7 @@ fn node_functions() !void {
 }
 
 fn static_tree_functions() !void {
-    var tree = zzz.ZStaticTree(8){};
+    var tree = zzz.StaticTree(8){};
     try zzz.appendText(&tree, null, "foo:bar;biz:baz,boom");
 
     // Remaining nodes in the tree.
@@ -60,7 +60,7 @@ fn static_tree_functions() !void {
 }
 
 fn dynamic_tree_functions() !void {
-    var tree = zzz.ZDynamicTree.init(std.testing.allocator);
+    var tree = zzz.DynamicTree.init(std.testing.allocator);
     defer tree.deinit();
 
     try zzz.appendText(&tree, null, "foo:bar;biz:baz,boom");
@@ -72,8 +72,8 @@ fn dynamic_tree_functions() !void {
 }
 
 fn module_functions() !void {
-    var stree = zzz.ZStaticTree(8){};
-    var dtree = zzz.ZDynamicTree.init(std.testing.allocator);
+    var stree = zzz.StaticTree(8){};
+    var dtree = zzz.DynamicTree.init(std.testing.allocator);
     defer dtree.deinit();
 
     // Append text.

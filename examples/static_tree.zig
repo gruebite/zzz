@@ -6,7 +6,7 @@ const json_example = @embedFile("../example-data/json-example-3.zzz");
 
 pub fn main() !void {
     // The kobold has exactly 51 nodes.
-    var tree = zzz.ZStaticTree(51){};
+    var tree = zzz.StaticTree(51){};
     // Append the text to the tree.
     try zzz.appendText(&tree, null, kobold);
     // Debug print.
@@ -17,7 +17,7 @@ pub fn main() !void {
     std.debug.print("Kobold's CON: {s}\n", .{tree.root.findDescendant("con").?.child.?.value});
 
     // The JSON example has exactly 161 nodes.
-    var big_tree = zzz.ZStaticTree(161){};
+    var big_tree = zzz.StaticTree(161){};
     try zzz.appendText(&big_tree, null, json_example);
     big_tree.root.show();
 

@@ -1,96 +1,10 @@
-//! zzz format serializer and deserializer. Public domain.
-//!
-//! SPARSE SPEC
-//! (zzz text is escaped using Zig's multiline string: \\)
-//!
-//! zzz text describes a tree of strings. Special characters and spaces are used to go up and down
-//! the tree. The tree has an implicit empty root node.
-//!
-//! Descending the tree:
-//! \\grandparent:parent:child:grandchild
-//! Output:
-//! null -> "grandparent" -> "parent" -> "child" -> "grandchild"
-//!
-//! Traversing the children of root (siblings):
-//! \\sibling1,sibling2,sibling3
-//! Output:
-//! null -> "sibling1"
-//!      -> "sibling2"
-//!      -> "sibling3"
-//!
-//! Going up to the parent:
-//! \\parent:child;anotherparent
-//! Output:
-//! null -> "parent" -> "child"
-//!      -> "anotherparent"
-//!
-//! White space and newlines are significant. A newline will take you back to the root:
-//! \\parent:child
-//! \\anotherparent
-//! Output:
-//! null -> "parent" -> "child"
-//!      -> "anotherparent"
-//!
-//! Exactly two spaces are used to to go down a level in the tree:
-//! \\parent:child
-//! \\  siblingtend
-//! null -> "parent" -> "child"
-//!                  -> "sibling"
-//!
-//! You can only go one level deeper than the previous line's depth. Anything more is an error:
-//! \\parent:child
-//! \\    sibling
-//! Output: Error!
-//!
-//! Trailing commas, semicolons, and colons are optional. So the above (correct one) can be written
-//! as:
-//! \\parent
-//! \\  child
-//! \\  sibling
-//! Output:
-//! null -> "parent" -> "child"
-//!                  -> "sibling"
-//!
-//! zzz can contain strings, integers (i32), floats (f32), boolean, and nulls:
-//! \\string:42:42.0:true::
-//! Output:
-//! null -> "string" -> 42 -> 42.0 -> true -> null
-//!
-//! strings are trimmed, they may still contain spaces:
-//! \\parent:     child:      grand child      ;
-//! Output:
-//! null -> "parent" -> "child" -> "grand child"
-//!
-//! strings can be quoted with double quotes or Lua strings:
-//! \\"parent":[[ child ]]:[==[grand child]=]]==];
-//! Output:
-//! null -> "parent" -> " child " -> "grand child]=]"
-//!
-//! Lua strings will skip the first empty newline:
-//! \\[[
-//! \\some text]]
-//! Output:
-//! null -> "some text"
-//!
-//! Strings are not escaped and taken "as-is".
-//! \\"\n\t\r"
-//! Output:
-//! null -> "\n\t\r"
-//!
-//! comments begin with # and run up to the end of the line. Their indentation follows the same
-//! rules as nodes.
-//! \\# A comment
-//! \\a node
-//! \\  # Another comment
-//! \\  a sibling
-//! Output:
-//! null -> "a node" -> "a sibling"
+//! zzz format serializer and deserializer.
 
 const std = @import("std");
 const mem = std.mem;
 
 /// The only output of the tokenizer.  Represents a slice into the given text.
-pub const ZNodeToken = struct {
+pub const NodeToken = struct {
     const Self = @This();
     /// 0 is root, 1 is top level children.
     depth: usize,
@@ -99,7 +13,7 @@ pub const ZNodeToken = struct {
     end: usize,
 };
 
-/// Parses text outputting ZNodeTokens. Does not convert strings to numbers, and all strings are
+/// Parses text outputting NodeTokens. Does not convert strings to numbers, and all strings are
 /// "as is", no escaping is performed.
 pub const StreamingParser = struct {
     const Self = @This();
@@ -133,13 +47,12 @@ pub const StreamingParser = struct {
     };
 
     pub const State = enum {
-        /// On a line that can have a node.
-        open_line,
-        ///
-        expect_znode,
+        /// At an empty line (nothing but indentation).
+        empty_line,
+        /// At an indent, expects another indent (to make it even), or a newline.
         indent,
         /// On a character that isn't part of a string.
-        open_character,
+        character,
         /// On the start of a single quote.
         single_quote,
         /// On the start of a double quote.
@@ -160,6 +73,8 @@ pub const StreamingParser = struct {
         multiline_close0,
         /// At a multiline string character.  Consumes everything.
         multiline_character,
+        /// At the end of a node.
+        end_node,
         /// At the end of a string.  Does not expect another string.
         end_string,
         /// At a comment on a line with nothing else.
@@ -177,7 +92,7 @@ pub const StreamingParser = struct {
 
     /// Resets the parser back to the beginning state.
     pub fn reset(self: *Self) void {
-        self.state = .open_line;
+        self.state = .empty_line;
         self.start_index = 0;
         self.current_index = 0;
         self.max_depth = 0;
@@ -190,14 +105,14 @@ pub const StreamingParser = struct {
 
     pub fn completeOrError(self: *const Self) !void {
         switch (self.state) {
-            .expect_znode, .open_line, .end_string, .comment, .open_comment, .indent => {},
+            .end_node, .empty_line, .end_string, .comment, .open_comment, .indent => {},
             else => return Error.UnexpectedEof,
         }
     }
 
-    /// Feeds a character to the parser. May output a ZNode. Check "hasCompleted" to see if there
+    /// Feeds a character to the parser. May output a Node. Check "hasCompleted" to see if there
     /// are any unfinished strings.
-    pub fn feed(self: *Self, c: u8) Error!?ZNodeToken {
+    pub fn feed(self: *Self, c: u8) Error!?NodeToken {
         // All cases step forward.
         defer self.current_index += 1;
         switch (self.state) {
@@ -210,21 +125,21 @@ pub const StreamingParser = struct {
                     }
                     self.node_depth = 0;
                     self.line_depth = 0;
-                    self.state = .open_line;
+                    self.state = .empty_line;
                 },
                 else => {
                     // Skip.
                 },
             },
             // All basically act the same except for a few minor differences.
-            .expect_znode, .end_string, .open_line, .open_character => switch (c) {
+            .end_node, .end_string, .empty_line, .character => switch (c) {
                 '#' => {
-                    if (self.state == .open_line) {
+                    if (self.state == .empty_line) {
                         self.state = .open_comment;
                     } else {
-                        if (self.state == .open_character) {
+                        if (self.state == .character) {
                             self.state = .comment;
-                            return ZNodeToken{
+                            return NodeToken{
                                 .depth = self.line_depth + self.node_depth + 1,
                                 .start = self.start_index,
                                 .end = self.current_index - self.trailing_spaces,
@@ -236,21 +151,22 @@ pub const StreamingParser = struct {
                 },
                 // The tricky character (and other whitespace).
                 ' ' => {
-                    if (self.state == .open_line) {
+                    if (self.state == .empty_line) {
                         if (self.line_depth >= self.max_depth) {
                             return Error.TooMuchindentation;
                         }
                         self.state = .indent;
-                    } else if (self.state == .open_character) {
+                    } else if (self.state == .character) {
                         self.trailing_spaces += 1;
                     } else {
                         // Skip spaces when expecting a node on a closed line,
                         // including this one.
                         self.start_index = self.current_index + 1;
+                        // Maintain current state.
                     }
                 },
                 ':' => {
-                    const node = ZNodeToken{
+                    const node = NodeToken{
                         .depth = self.line_depth + self.node_depth + 1,
                         .start = self.start_index,
                         .end = self.current_index - self.trailing_spaces,
@@ -259,14 +175,14 @@ pub const StreamingParser = struct {
                     self.node_depth += 1;
                     // Only return when we're not at end of a string because the string was already returned.
                     if (self.state != .end_string) {
-                        self.state = .expect_znode;
+                        self.state = .end_node;
                         return node;
                     } else {
-                        self.state = .expect_znode;
+                        self.state = .end_node;
                     }
                 },
                 ',' => {
-                    const node = ZNodeToken{
+                    const node = NodeToken{
                         .depth = self.line_depth + self.node_depth + 1,
                         .start = self.start_index,
                         .end = self.current_index - self.trailing_spaces,
@@ -274,17 +190,17 @@ pub const StreamingParser = struct {
                     self.start_index = self.current_index + 1;
                     // Only return when we're not at end of a string because the string was already returned.
                     if (self.state != .end_string) {
-                        self.state = .expect_znode;
+                        self.state = .end_node;
                         return node;
                     } else {
-                        self.state = .expect_znode;
+                        self.state = .end_node;
                     }
                 },
                 ';' => {
                     if (self.node_depth == 0) {
                         return Error.SemicolonWentPastRoot;
                     }
-                    const node = ZNodeToken{
+                    const node = NodeToken{
                         .depth = self.line_depth + self.node_depth + 1,
                         .start = self.start_index,
                         .end = self.current_index - self.trailing_spaces,
@@ -294,10 +210,10 @@ pub const StreamingParser = struct {
                     // Only return when we're not at end of a string, or in semicolons
                     // special case, when we don't have an empty string.
                     if (self.state != .end_string and node.start < node.end) {
-                        self.state = .expect_znode;
+                        self.state = .end_node;
                         return node;
                     } else {
-                        self.state = .expect_znode;
+                        self.state = .end_node;
                     }
                 },
                 '\'', '"' => {
@@ -305,7 +221,7 @@ pub const StreamingParser = struct {
                         return Error.InvalidCharacterAfterString;
                     }
                     // Don't start a string since we're in the middle of characters.
-                    if (self.state == .open_character) {
+                    if (self.state == .character) {
                         return null;
                     }
                     // We start here to account for the possibility of a string being ""
@@ -317,31 +233,31 @@ pub const StreamingParser = struct {
                         return Error.InvalidCharacterAfterString;
                     }
                     // Don't start a string since we're in the middle of characters.
-                    if (self.state == .open_character) {
+                    if (self.state == .character) {
                         return null;
                     }
                     self.open_string_level = 0;
                     self.state = .multiline_open0;
                 },
                 '\n' => {
-                    const node = ZNodeToken{
+                    const node = NodeToken{
                         .depth = self.line_depth + self.node_depth + 1,
                         .start = self.start_index,
                         .end = self.current_index - self.trailing_spaces,
                     };
                     self.start_index = self.current_index + 1;
                     // Only reset on a non open line.
-                    if (self.state != .open_line) {
+                    if (self.state != .empty_line) {
                         self.max_depth = self.line_depth + 1;
                         self.line_depth = 0;
                     }
                     self.node_depth = 0;
                     // Only return something if there is something. Quoted strings are good.
-                    if (self.state == .open_character) {
-                        self.state = .open_line;
+                    if (self.state == .character) {
+                        self.state = .empty_line;
                         return node;
                     } else {
-                        self.state = .open_line;
+                        self.state = .empty_line;
                     }
                 },
                 '\t', '\r' => {
@@ -352,19 +268,19 @@ pub const StreamingParser = struct {
                     if (self.state == .end_string) {
                         return Error.InvalidCharacterAfterString;
                     }
-                    // Don't reset if we're in a string.
-                    if (self.state != .open_character) {
+                    // Move the start index forward (trim) when we don't have characters.
+                    if (self.state != .character) {
                         self.start_index = self.current_index;
                     }
                     self.trailing_spaces = 0;
-                    self.state = .open_character;
+                    self.state = .character;
                 },
             },
             .indent => switch (c) {
                 ' ' => {
                     self.start_index = self.current_index + 1;
                     self.line_depth += 1;
-                    self.state = .open_line;
+                    self.state = .empty_line;
                 },
                 else => {
                     return Error.OddindentationValue;
@@ -373,7 +289,7 @@ pub const StreamingParser = struct {
             .single_quote, .double_quote => {
                 if (self.state == .single_quote and c == '\'' or self.state == .double_quote and c == '"') {
                     self.state = .end_string;
-                    const node = ZNodeToken{
+                    const node = NodeToken{
                         .depth = self.line_depth + self.node_depth + 1,
                         .start = self.start_index,
                         .end = self.current_index,
@@ -387,7 +303,7 @@ pub const StreamingParser = struct {
             .single_quote_character, .double_quote_character => {
                 if (self.state == .single_quote_character and c == '\'' or self.state == .double_quote_character and c == '"') {
                     self.state = .end_string;
-                    const node = ZNodeToken{
+                    const node = NodeToken{
                         .depth = self.line_depth + self.node_depth + 1,
                         .start = self.start_index,
                         .end = self.current_index,
@@ -443,7 +359,7 @@ pub const StreamingParser = struct {
                 ']' => {
                     if (self.close_string_level == self.open_string_level) {
                         self.state = .end_string;
-                        return ZNodeToken{
+                        return NodeToken{
                             .depth = self.line_depth + self.node_depth + 1,
                             .start = self.start_index,
                             .end = self.current_index - self.open_string_level - 1,
@@ -459,8 +375,8 @@ pub const StreamingParser = struct {
         return null;
     }
 
-    /// Parses the stream, outputting ZNodeTokens which reference the text.
-    pub fn parse(self: *Self, idx: *usize, text: []const u8) !?ZNodeToken {
+    /// Parses the stream, outputting NodeTokens which reference the text.
+    pub fn parse(self: *Self, idx: *usize, text: []const u8) !?NodeToken {
         while (idx.* <= text.len) {
             // Insert an extra newline at the end of the stream.
             const node = if (idx.* == text.len) try self.feed('\n') else try self.feed(text[idx.*]);
@@ -562,17 +478,17 @@ test "parsing depths" {
 }
 
 /// Represents a node in a static tree. Nodes have a parent, child, and sibling pointer.
-pub const ZNode = struct {
+pub const Node = struct {
     const Self = @This();
     value: []const u8 = "",
-    parent: ?*ZNode = null,
-    sibling: ?*ZNode = null,
-    child: ?*ZNode = null,
+    parent: ?*Node = null,
+    sibling: ?*Node = null,
+    child: ?*Node = null,
 
     /// Returns the next Node in the tree. Will return Null after reaching root. For nodes further
     /// down the tree, they will bubble up, resulting in a negative depth. Depth will be modified
     /// relative to self: 0 for siblings, -1 or less for parents, 1 for children.
-    pub fn next(self: *const Self, depth: ?*isize) ?*ZNode {
+    pub fn next(self: *const Self, depth: ?*isize) ?*Node {
         if (self.child) |c| {
             if (depth) |d| {
                 d.* += 1;
@@ -582,7 +498,7 @@ pub const ZNode = struct {
             return c;
         } else {
             // Go up and forward.
-            var iter: ?*const ZNode = self;
+            var iter: ?*const Node = self;
             while (iter != null) {
                 iter = iter.?.parent;
                 if (iter != null) {
@@ -599,7 +515,7 @@ pub const ZNode = struct {
     }
 
     /// Iterates this node's children. Pass null to start. `iter = node.nextChild(iter);`
-    pub fn nextChild(self: *const Self, iter: ?*const ZNode) ?*ZNode {
+    pub fn nextChild(self: *const Self, iter: ?*const Node) ?*Node {
         if (iter) |it| {
             return it.sibling;
         } else {
@@ -608,7 +524,7 @@ pub const ZNode = struct {
     }
 
     /// Returns the next descendant. Pass null to start.
-    pub fn nextDescendant(self: *const Self, iter: ?*const ZNode, depth: ?*isize) ?*ZNode {
+    pub fn nextDescendant(self: *const Self, iter: ?*const Node, depth: ?*isize) ?*Node {
         if (iter == null) {
             if (self.child) |c| {
                 if (depth) |d| {
@@ -650,9 +566,9 @@ pub const ZNode = struct {
     }
 
     /// Returns the nth child. O(n)
-    pub fn getNthChild(self: *const Self, nth: usize) ?*ZNode {
+    pub fn getNthChild(self: *const Self, nth: usize) ?*Node {
         var count: usize = 0;
-        var iter: ?*ZNode = self.child;
+        var iter: ?*Node = self.child;
         while (iter) |n| {
             if (count == nth) {
                 return n;
@@ -674,7 +590,7 @@ pub const ZNode = struct {
     /// Returns the number of children. O(n)
     pub fn getChildCount(self: *const Self) usize {
         var count: usize = 0;
-        var iter: ?*ZNode = self.child;
+        var iter: ?*Node = self.child;
         while (iter) |n| {
             count += 1;
             iter = n.sibling;
@@ -683,8 +599,8 @@ pub const ZNode = struct {
     }
 
     /// Finds the first child with the specified value.
-    pub fn findChild(self: *const Self, value: []const u8) ?*ZNode {
-        var iter: ?*ZNode = self.child orelse return null;
+    pub fn findChild(self: *const Self, value: []const u8) ?*Node {
+        var iter: ?*Node = self.child orelse return null;
         while (iter) |n| {
             if (mem.eql(u8, n.value, value)) {
                 return n;
@@ -697,8 +613,8 @@ pub const ZNode = struct {
     /// Finds the next child after the given iterator. This is good for when you can guess the order
     /// of the nodes, which can cut down on starting from the beginning. Passing null starts over
     /// from the beginning. Returns the found node or null (it will loop back around).
-    pub fn findNextChild(self: *const Self, start: ?*const ZNode, value: []const u8) ?*ZNode {
-        var iter: ?*ZNode = self.child;
+    pub fn findNextChild(self: *const Self, start: ?*const Node, value: []const u8) ?*Node {
+        var iter: ?*Node = self.child;
         if (start) |si| {
             iter = si.sibling;
         }
@@ -717,8 +633,8 @@ pub const ZNode = struct {
     }
 
     /// Traverses descendants until a node with the specific value is found.
-    pub fn findDescendant(self: *const Self, value: []const u8) ?*ZNode {
-        var iter: ?*const ZNode = null;
+    pub fn findDescendant(self: *const Self, value: []const u8) ?*Node {
+        var iter: ?*const Node = null;
         while (self.nextDescendant(iter, null)) |n| : (iter = n) {
             if (mem.eql(u8, n.value, value)) {
                 return n;
@@ -730,7 +646,7 @@ pub const ZNode = struct {
     /// Returns true if node has more than one descendant (child, grandchild, etc).
     fn _moreThanOneDescendant(self: *const Self) bool {
         var count: usize = 0;
-        var iter: ?*const ZNode = null;
+        var iter: ?*const Node = null;
         while (self.nextDescendant(iter, null)) |n| : (iter = n) {
             count += 1;
             if (count > 1) {
@@ -740,11 +656,11 @@ pub const ZNode = struct {
         return false;
     }
 
-    /// Outputs a `ZNode`s children on multiple lines. Excludes this node as root.
+    /// Outputs a `Node`s children on multiple lines. Excludes this node as root.
     fn stringify(self: *const Self, out_stream: anytype) @TypeOf(out_stream).Error!void {
         var depth: isize = 0;
         var last_depth: isize = 0;
-        var iter: ?*const ZNode = null;
+        var iter: ?*const Node = null;
         while (self.nextDescendant(iter, &depth)) |n| : (iter = n) {
             // Special case for root.
             if (last_depth == 0) {
@@ -804,17 +720,17 @@ pub const ZNode = struct {
     }
 };
 
-pub const ZStaticTreeError = error{
+pub const StaticTreeError = error{
     TreeFull,
 } || StreamingParser.Error;
 
 /// Represents a static tree.  Does not manage memory for strings, only references it.
-pub fn ZStaticTree(comptime S: usize) type {
+pub fn StaticTree(comptime S: usize) type {
     return struct {
         const Self = @This();
 
-        root: ZNode = ZNode{},
-        nodes: [S]ZNode = [_]ZNode{.{}} ** S,
+        root: Node = Node{},
+        nodes: [S]Node = [_]Node{.{}} ** S,
         node_count: usize = 0,
 
         /// Returns the number of nodes remaining in the tree.
@@ -829,9 +745,9 @@ pub fn ZStaticTree(comptime S: usize) type {
         }
 
         /// Adds a node to given a parent. Null parent uses the root.
-        pub fn appendValue(self: *Self, parent: ?*ZNode, value: []const u8) ZStaticTreeError!*ZNode {
+        pub fn appendValue(self: *Self, parent: ?*Node, value: []const u8) StaticTreeError!*Node {
             if (self.node_count >= S) {
-                return ZStaticTreeError.TreeFull;
+                return StaticTreeError.TreeFull;
             }
             var true_parent = if (parent == null) &self.root else parent;
             var node = &self.nodes[self.node_count];
@@ -865,11 +781,11 @@ pub fn ZStaticTree(comptime S: usize) type {
 test "error fills tree" {
     const testing = std.testing;
 
-    var tree = ZStaticTree(6){};
+    var tree = StaticTree(6){};
     // Using 2 nodes.
     try appendText(&tree, null, "foo:bar");
     try testing.expectEqual(@as(usize, 2), tree.node_count);
-    try testing.expectError(ZStaticTreeError.TreeFull, appendText(&tree, null, "bar:foo:baz:ha:ha"));
+    try testing.expectError(StaticTreeError.TreeFull, appendText(&tree, null, "bar:foo:baz:ha:ha"));
     try testing.expectEqual(@as(usize, 6), tree.node_count);
 }
 
@@ -886,7 +802,7 @@ test "static tree" {
         \\  : name:Fire
     ;
 
-    var tree = ZStaticTree(100){};
+    var tree = StaticTree(100){};
     try appendText(&tree, null, text);
 
     var iter = tree.root.findNextChild(null, "max_particles");
@@ -904,7 +820,7 @@ test "static tree" {
 test "node appending and searching" {
     const testing = std.testing;
 
-    var tree = ZStaticTree(100){};
+    var tree = StaticTree(100){};
     var root = try tree.appendValue(null, "");
 
     _ = try tree.appendValue(root, "");
@@ -932,8 +848,8 @@ test "node appending and searching" {
 test "appending node" {
     const testing = std.testing;
 
-    var tree0 = ZStaticTree(8){};
-    var tree1 = ZStaticTree(8){};
+    var tree0 = StaticTree(8){};
+    var tree1 = StaticTree(8){};
 
     try appendText(&tree0, null, "foo:bar");
     tree1.root.value = "ROOT";
@@ -951,15 +867,15 @@ test "appending node" {
     try testing.expectEqualSlices(u8, "baz", root.child.?.sibling.?.child.?.child.?.value);
 }
 
-pub const ZDynamicTreeError = error{
+pub const DynamicTreeError = error{
     OutOfMemory,
 } || StreamingParser.Error;
 
-pub const ZDynamicTree = struct {
+pub const DynamicTree = struct {
     const Self = @This();
 
     arena: std.heap.ArenaAllocator,
-    root: ZNode = ZNode{},
+    root: Node = Node{},
     node_count: usize = 0,
 
     pub fn init(allocator: std.mem.Allocator) Self {
@@ -971,9 +887,9 @@ pub const ZDynamicTree = struct {
     }
 
     /// Appends a raw value allocated with this struct's arena allocator.
-    pub fn appendRawValue(self: *Self, parent: ?*ZNode, value: []const u8) ZDynamicTreeError!*ZNode {
+    pub fn appendRawValue(self: *Self, parent: ?*Node, value: []const u8) DynamicTreeError!*Node {
         var true_parent = if (parent == null) &self.root else parent.?;
-        var node = try self.arena.allocator().create(ZNode);
+        var node = try self.arena.allocator().create(Node);
         self.node_count += 1;
         node.value = value;
         node.parent = true_parent;
@@ -991,36 +907,36 @@ pub const ZDynamicTree = struct {
     }
 
     /// Appends a value, duping it.
-    pub fn appendValue(self: *Self, parent: ?*ZNode, value: []const u8) ZDynamicTreeError!*ZNode {
+    pub fn appendValue(self: *Self, parent: ?*Node, value: []const u8) DynamicTreeError!*Node {
         var duped = try self.arena.allocator().dupe(u8, value);
         errdefer self.arena.allocator().free(duped);
         return self.appendRawValue(parent, duped);
     }
 
     /// Appends anytype to the tree by converting it to a string with allocPrint.
-    pub fn appendAnytype(self: *Self, parent: ?*ZNode, value: anytype) ZDynamicTreeError!*ZNode {
+    pub fn appendAnytype(self: *Self, parent: ?*Node, value: anytype) DynamicTreeError!*Node {
         return self.appendPrint(parent, "{any}", .{value});
     }
 
     /// Appends anytype to the tree by converting it to a string with allocPrint.
-    pub fn appendPrint(self: *Self, parent: ?*ZNode, comptime fmt: []const u8, value: anytype) ZDynamicTreeError!*ZNode {
+    pub fn appendPrint(self: *Self, parent: ?*Node, comptime fmt: []const u8, value: anytype) DynamicTreeError!*Node {
         var string = try std.fmt.allocPrint(self.arena.allocator(), fmt, value);
         errdefer self.arena.allocator().free(string);
         return self.appendRawValue(parent, string);
     }
 };
 
-const ZError = ZDynamicTreeError || ZStaticTreeError;
+const ZError = DynamicTreeError || StaticTreeError;
 
 /// Adds text under a parent node.  Passing null will put the text under root.
-pub fn appendText(tree: anytype, parent: ?*ZNode, text: []const u8) ZError!void {
+pub fn appendText(tree: anytype, parent: ?*Node, text: []const u8) ZError!void {
     const tree_type = @TypeOf(tree);
     const tree_type_info = @typeInfo(tree_type);
     if (tree_type_info != .Pointer) {
         @compileError("copyNode expects a zzz tree pointer");
     }
 
-    var current: *ZNode = if (parent == null) &tree.root else parent.?;
+    var current: *Node = if (parent == null) &tree.root else parent.?;
     var current_depth: usize = 0;
 
     var stream = StreamingParser.init();
@@ -1056,7 +972,7 @@ pub fn appendText(tree: anytype, parent: ?*ZNode, text: []const u8) ZError!void 
 
 /// Copies a node under another parent.  Does not check if there are overlaps, like copying a
 /// parent to be under a child.
-pub fn copyNode(tree: anytype, parent: ?*ZNode, node: *const ZNode) ZError!*ZNode {
+pub fn copyNode(tree: anytype, parent: ?*Node, node: *const Node) ZError!*Node {
     const tree_type = @TypeOf(tree);
     const tree_type_info = @typeInfo(tree_type);
     if (tree_type_info != .Pointer) {
@@ -1069,8 +985,8 @@ pub fn copyNode(tree: anytype, parent: ?*ZNode, node: *const ZNode) ZError!*ZNod
     var last_depth: isize = 1;
     var depth: isize = 0;
     var iter = node;
-    var piter: ?*ZNode = new_root;
-    var plast: ?*ZNode = null;
+    var piter: ?*Node = new_root;
+    var plast: ?*Node = null;
     while (iter.next(&depth)) |next| : (iter = next) {
         // If depth comes back to 0 or less, we're siblings or parent of node.
         if (depth <= 0) {
@@ -1111,7 +1027,7 @@ pub fn countTextNodes(text: []const u8) !usize {
 test "dynamic tree" {
     const testing = std.testing;
 
-    var tree0 = ZDynamicTree.init(testing.allocator);
+    var tree0 = DynamicTree.init(testing.allocator);
     defer tree0.deinit();
 
     try appendText(&tree0, null,
