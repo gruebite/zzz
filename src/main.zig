@@ -77,7 +77,7 @@
 //! Output:
 //! null -> "\n\t\r"
 //!
-//! Comments begin with # and run up to the end of the line. Their indentation follows the same
+//! comments begin with # and run up to the end of the line. Their indentation follows the same
 //! rules as nodes.
 //! \\# A comment
 //! \\a node
@@ -89,7 +89,7 @@
 const std = @import("std");
 const mem = std.mem;
 
-/// The only output of the tokenizer.
+/// The only output of the tokenizer.  Represents a slice into the given text.
 pub const ZNodeToken = struct {
     const Self = @This();
     /// 0 is root, 1 is top level children.
@@ -104,13 +104,14 @@ pub const ZNodeToken = struct {
 pub const StreamingParser = struct {
     const Self = @This();
     state: State,
+    /// Keeps track of the start of a slice.
     start_index: usize,
     current_index: usize,
-    // The maximum node depth.
+    /// The maximum node depth.
     max_depth: usize,
-    // The current line's depth.
+    /// The current line's depth.
     line_depth: usize,
-    // The current node depth.
+    /// The current node depth.
     node_depth: usize,
     /// Level of multiline string.
     open_string_level: usize,
@@ -120,10 +121,9 @@ pub const StreamingParser = struct {
     trailing_spaces: usize,
 
     pub const Error = error{
-        TooMuchIndentation,
+        TooMuchindentation,
         InvalidWhitespace,
-        OddIndentationValue,
-        InvalidQuotation,
+        OddindentationValue,
         InvalidMultilineOpen,
         InvalidMultilineClose,
         InvalidNewLineInString,
@@ -133,22 +133,39 @@ pub const StreamingParser = struct {
     };
 
     pub const State = enum {
-        /// Whether we're starting on an openline.
-        OpenLine,
-        ExpectZNode,
-        Indent,
-        OpenCharacter,
-        Quotation,
-        SingleLineCharacter,
-        MultilineOpen0,
-        MultilineOpen1,
-        MultilineLevelOpen,
-        MultilineLevelClose,
-        MultilineClose0,
-        MultilineCharacter,
-        EndString,
-        OpenComment,
-        Comment,
+        /// On a line that can have a node.
+        open_line,
+        ///
+        expect_znode,
+        indent,
+        /// On a character that isn't part of a string.
+        open_character,
+        /// On the start of a single quote.
+        single_quote,
+        /// On the start of a double quote.
+        double_quote,
+        /// At character part of a single quote string.  No newlines.
+        single_quote_character,
+        /// At character part of a double quote string.  No newlines.
+        double_quote_character,
+        /// At the first open of a multline string: `[`.  This consumes `=`'s to dictate nesting level of multiline string.
+        multiline_open0,
+        /// At the second open of a multiline string: `[`.
+        multiline_open1,
+        /// At the open nesting level in a multiline string: '='. Expects a `[` or `=`, nothing else.
+        multiline_level_open,
+        /// At the close nesting level in a multiline string: '='. Expects a `]` or `=`, nothing else.
+        multiline_level_close,
+        /// At the first close of a multiline string: `]`.
+        multiline_close0,
+        /// At a multiline string character.  Consumes everything.
+        multiline_character,
+        /// At the end of a string.  Does not expect another string.
+        end_string,
+        /// At a comment on a line with nothing else.
+        open_comment,
+        /// At a comment on a line with other nodes.
+        comment,
     };
 
     /// Returns a blank parser.
@@ -160,7 +177,7 @@ pub const StreamingParser = struct {
 
     /// Resets the parser back to the beginning state.
     pub fn reset(self: *Self) void {
-        self.state = .OpenLine;
+        self.state = .open_line;
         self.start_index = 0;
         self.current_index = 0;
         self.max_depth = 0;
@@ -173,7 +190,7 @@ pub const StreamingParser = struct {
 
     pub fn completeOrError(self: *const Self) !void {
         switch (self.state) {
-            .ExpectZNode, .OpenLine, .EndString, .Comment, .OpenComment, .Indent => {},
+            .expect_znode, .open_line, .end_string, .comment, .open_comment, .indent => {},
             else => return Error.UnexpectedEof,
         }
     }
@@ -181,58 +198,58 @@ pub const StreamingParser = struct {
     /// Feeds a character to the parser. May output a ZNode. Check "hasCompleted" to see if there
     /// are any unfinished strings.
     pub fn feed(self: *Self, c: u8) Error!?ZNodeToken {
+        // All cases step forward.
         defer self.current_index += 1;
-        //std.debug.print("FEED<{}> {} {} ({c})\n", .{self.state, self.current_index, c, c});
         switch (self.state) {
-            .OpenComment, .Comment => switch (c) {
+            .open_comment, .comment => switch (c) {
                 '\n' => {
                     self.start_index = self.current_index + 1;
-                    // We're ending a line with nodes.
-                    if (self.state == .Comment) {
+                    // We're ending a line with nodes, so we can increase our depth on the following line.
+                    if (self.state == .comment) {
                         self.max_depth = self.line_depth + 1;
                     }
                     self.node_depth = 0;
                     self.line_depth = 0;
-                    self.state = .OpenLine;
+                    self.state = .open_line;
                 },
                 else => {
                     // Skip.
                 },
             },
             // All basically act the same except for a few minor differences.
-            .ExpectZNode, .OpenLine, .EndString, .OpenCharacter => switch (c) {
+            .expect_znode, .end_string, .open_line, .open_character => switch (c) {
                 '#' => {
-                    if (self.state == .OpenLine) {
-                        self.state = .OpenComment;
+                    if (self.state == .open_line) {
+                        self.state = .open_comment;
                     } else {
-                        defer self.state = .Comment;
-                        if (self.state == .OpenCharacter) {
+                        if (self.state == .open_character) {
+                            self.state = .comment;
                             return ZNodeToken{
                                 .depth = self.line_depth + self.node_depth + 1,
                                 .start = self.start_index,
                                 .end = self.current_index - self.trailing_spaces,
                             };
+                        } else {
+                            self.state = .comment;
                         }
                     }
                 },
                 // The tricky character (and other whitespace).
                 ' ' => {
-                    if (self.state == .OpenLine) {
+                    if (self.state == .open_line) {
                         if (self.line_depth >= self.max_depth) {
-                            return Error.TooMuchIndentation;
+                            return Error.TooMuchindentation;
                         }
-                        self.state = .Indent;
-                    } else if (self.state == .OpenCharacter) {
+                        self.state = .indent;
+                    } else if (self.state == .open_character) {
                         self.trailing_spaces += 1;
                     } else {
-
                         // Skip spaces when expecting a node on a closed line,
                         // including this one.
                         self.start_index = self.current_index + 1;
                     }
                 },
                 ':' => {
-                    defer self.state = .ExpectZNode;
                     const node = ZNodeToken{
                         .depth = self.line_depth + self.node_depth + 1,
                         .start = self.start_index,
@@ -240,29 +257,33 @@ pub const StreamingParser = struct {
                     };
                     self.start_index = self.current_index + 1;
                     self.node_depth += 1;
-                    // Only return when we're not at end of a string.
-                    if (self.state != .EndString) {
+                    // Only return when we're not at end of a string because the string was already returned.
+                    if (self.state != .end_string) {
+                        self.state = .expect_znode;
                         return node;
+                    } else {
+                        self.state = .expect_znode;
                     }
                 },
                 ',' => {
-                    defer self.state = .ExpectZNode;
                     const node = ZNodeToken{
                         .depth = self.line_depth + self.node_depth + 1,
                         .start = self.start_index,
                         .end = self.current_index - self.trailing_spaces,
                     };
                     self.start_index = self.current_index + 1;
-                    // Only return when we're not at end of a string.
-                    if (self.state != .EndString) {
+                    // Only return when we're not at end of a string because the string was already returned.
+                    if (self.state != .end_string) {
+                        self.state = .expect_znode;
                         return node;
+                    } else {
+                        self.state = .expect_znode;
                     }
                 },
                 ';' => {
                     if (self.node_depth == 0) {
                         return Error.SemicolonWentPastRoot;
                     }
-                    defer self.state = .ExpectZNode;
                     const node = ZNodeToken{
                         .depth = self.line_depth + self.node_depth + 1,
                         .start = self.start_index,
@@ -272,35 +293,37 @@ pub const StreamingParser = struct {
                     self.node_depth -= 1;
                     // Only return when we're not at end of a string, or in semicolons
                     // special case, when we don't have an empty string.
-                    if (self.state != .EndString and node.start < node.end) {
+                    if (self.state != .end_string and node.start < node.end) {
+                        self.state = .expect_znode;
                         return node;
+                    } else {
+                        self.state = .expect_znode;
                     }
                 },
-                '"' => {
-                    if (self.state == .EndString) {
+                '\'', '"' => {
+                    if (self.state == .end_string) {
                         return Error.InvalidCharacterAfterString;
                     }
-                    // Don't start another string.
-                    if (self.state == .OpenCharacter) {
+                    // Don't start a string since we're in the middle of characters.
+                    if (self.state == .open_character) {
                         return null;
                     }
                     // We start here to account for the possibility of a string being ""
                     self.start_index = self.current_index + 1;
-                    self.state = .Quotation;
+                    self.state = if (c == '\'') .single_quote else .double_quote;
                 },
                 '[' => {
-                    if (self.state == .EndString) {
+                    if (self.state == .end_string) {
                         return Error.InvalidCharacterAfterString;
                     }
-                    // Don't start another string.
-                    if (self.state == .OpenCharacter) {
+                    // Don't start a string since we're in the middle of characters.
+                    if (self.state == .open_character) {
                         return null;
                     }
                     self.open_string_level = 0;
-                    self.state = .MultilineOpen0;
+                    self.state = .multiline_open0;
                 },
                 '\n' => {
-                    defer self.state = .OpenLine;
                     const node = ZNodeToken{
                         .depth = self.line_depth + self.node_depth + 1,
                         .start = self.start_index,
@@ -308,14 +331,17 @@ pub const StreamingParser = struct {
                     };
                     self.start_index = self.current_index + 1;
                     // Only reset on a non open line.
-                    if (self.state != .OpenLine) {
+                    if (self.state != .open_line) {
                         self.max_depth = self.line_depth + 1;
                         self.line_depth = 0;
                     }
                     self.node_depth = 0;
                     // Only return something if there is something. Quoted strings are good.
-                    if (self.state == .OpenCharacter) {
+                    if (self.state == .open_character) {
+                        self.state = .open_line;
                         return node;
+                    } else {
+                        self.state = .open_line;
                     }
                 },
                 '\t', '\r' => {
@@ -323,30 +349,44 @@ pub const StreamingParser = struct {
                 },
                 else => {
                     // We already have a string.
-                    if (self.state == .EndString) {
+                    if (self.state == .end_string) {
                         return Error.InvalidCharacterAfterString;
                     }
                     // Don't reset if we're in a string.
-                    if (self.state != .OpenCharacter) {
+                    if (self.state != .open_character) {
                         self.start_index = self.current_index;
                     }
                     self.trailing_spaces = 0;
-                    self.state = .OpenCharacter;
+                    self.state = .open_character;
                 },
             },
-            .Indent => switch (c) {
+            .indent => switch (c) {
                 ' ' => {
                     self.start_index = self.current_index + 1;
                     self.line_depth += 1;
-                    self.state = .OpenLine;
+                    self.state = .open_line;
                 },
                 else => {
-                    return Error.OddIndentationValue;
+                    return Error.OddindentationValue;
                 },
             },
-            .Quotation => switch (c) {
-                '"' => {
-                    self.state = .EndString;
+            .single_quote, .double_quote => {
+                if (self.state == .single_quote and c == '\'' or self.state == .double_quote and c == '"') {
+                    self.state = .end_string;
+                    const node = ZNodeToken{
+                        .depth = self.line_depth + self.node_depth + 1,
+                        .start = self.start_index,
+                        .end = self.current_index,
+                    };
+                    self.start_index = self.current_index + 1;
+                    return node;
+                } else {
+                    self.state = if (self.state == .single_quote) .single_quote_character else .double_quote_character;
+                }
+            },
+            .single_quote_character, .double_quote_character => {
+                if (self.state == .single_quote_character and c == '\'' or self.state == .double_quote_character and c == '"') {
+                    self.state = .end_string;
                     const node = ZNodeToken{
                         .depth = self.line_depth + self.node_depth + 1,
                         .start = self.start_index,
@@ -355,79 +395,61 @@ pub const StreamingParser = struct {
                     // Reset because we're going to expecting nodes.
                     self.start_index = self.current_index + 1;
                     return node;
-                },
-                else => {
-                    self.state = .SingleLineCharacter;
-                },
-            },
-            .SingleLineCharacter => switch (c) {
-                '"' => {
-                    self.state = .EndString;
-                    const node = ZNodeToken{
-                        .depth = self.line_depth + self.node_depth + 1,
-                        .start = self.start_index,
-                        .end = self.current_index,
-                    };
-                    // Reset because we're going to expecting nodes.
-                    self.start_index = self.current_index + 1;
-                    return node;
-                },
-                '\n' => {
+                } else if (c == '\n') {
                     return Error.InvalidNewLineInString;
-                },
-                else => {
+                } else {
                     // Consume.
-                },
+                }
             },
-            .MultilineOpen0, .MultilineLevelOpen => switch (c) {
+            .multiline_open0, .multiline_level_open => switch (c) {
                 '=' => {
                     self.open_string_level += 1;
-                    self.state = .MultilineLevelOpen;
+                    self.state = .multiline_level_open;
                 },
                 '[' => {
                     self.start_index = self.current_index + 1;
-                    self.state = .MultilineOpen1;
+                    self.state = .multiline_open1;
                 },
                 else => {
                     return Error.InvalidMultilineOpen;
                 },
             },
-            .MultilineOpen1 => switch (c) {
+            .multiline_open1 => switch (c) {
                 ']' => {
-                    self.state = .MultilineClose0;
+                    self.state = .multiline_close0;
                 },
                 '\n' => {
                     // Skip first newline.
                     self.start_index = self.current_index + 1;
                 },
                 else => {
-                    self.state = .MultilineCharacter;
+                    self.state = .multiline_character;
                 },
             },
-            .MultilineCharacter => switch (c) {
+            .multiline_character => switch (c) {
                 ']' => {
                     self.close_string_level = 0;
-                    self.state = .MultilineClose0;
+                    self.state = .multiline_close0;
                 },
                 else => {
                     // Capture EVERYTHING.
                 },
             },
-            .MultilineClose0, .MultilineLevelClose => switch (c) {
+            .multiline_close0, .multiline_level_close => switch (c) {
                 '=' => {
                     self.close_string_level += 1;
-                    self.state = .MultilineLevelClose;
+                    self.state = .multiline_level_close;
                 },
                 ']' => {
                     if (self.close_string_level == self.open_string_level) {
-                        self.state = .EndString;
+                        self.state = .end_string;
                         return ZNodeToken{
                             .depth = self.line_depth + self.node_depth + 1,
                             .start = self.start_index,
                             .end = self.current_index - self.open_string_level - 1,
                         };
                     }
-                    self.state = .MultilineCharacter;
+                    self.state = .multiline_character;
                 },
                 else => {
                     return Error.InvalidMultilineClose;
@@ -472,7 +494,8 @@ test "parsing slice output" {
         \\[[sy]]
         \\  # another
         \\  : n : "en"  ,  [[m]]
-        \\    "sc"   :  [[10]]   ,    g #inline
+        \\    "s'c"   :  [[10]]   ,    g #inline
+        \\    'foo'
         \\  [[]]:[==[
         \\hi]==]
     ;
@@ -485,9 +508,10 @@ test "parsing slice output" {
     try testing.expectEqualSlices(u8, "n", try testNextTextOrError(&stream, &idx, text));
     try testing.expectEqualSlices(u8, "en", try testNextTextOrError(&stream, &idx, text));
     try testing.expectEqualSlices(u8, "m", try testNextTextOrError(&stream, &idx, text));
-    try testing.expectEqualSlices(u8, "sc", try testNextTextOrError(&stream, &idx, text));
+    try testing.expectEqualSlices(u8, "s'c", try testNextTextOrError(&stream, &idx, text));
     try testing.expectEqualSlices(u8, "10", try testNextTextOrError(&stream, &idx, text));
     try testing.expectEqualSlices(u8, "g", try testNextTextOrError(&stream, &idx, text));
+    try testing.expectEqualSlices(u8, "foo", try testNextTextOrError(&stream, &idx, text));
     try testing.expectEqualSlices(u8, "", try testNextTextOrError(&stream, &idx, text));
     try testing.expectEqualSlices(u8, "hi", try testNextTextOrError(&stream, &idx, text));
 }

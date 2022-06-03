@@ -207,13 +207,13 @@ Output:
 null -> "parent" -> "child" -> "grand child"
 ```
 
-### Strings can be quoted with double quotes or Lua strings:
+### Strings can be quoted with double quotes, single quotes, or Lua strings:
 ```
-"parent":[[ child ]]:[==[grand child]=]]==];
+"parent":[[ child ]]:[==[grand child]=]]==]:'great grand child'
 ```
 Output:
 ```
-null -> "parent" -> " child " -> "grand child]=]"
+null -> "parent" -> " child " -> "grand child]=]" -> "great grand child"
 ```
 
 ### Lua strings will skip the first newline if it's empty:
