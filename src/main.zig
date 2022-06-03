@@ -523,7 +523,7 @@ pub const Node = struct {
         }
     }
 
-    /// Returns the next descendant. Pass null to start.
+    /// Returns the next descendant under this node. Pass null to start.
     pub fn nextDescendant(self: *const Self, iter: ?*const Node, depth: ?*isize) ?*Node {
         if (iter == null) {
             if (self.child) |c| {
@@ -611,23 +611,20 @@ pub const Node = struct {
     }
 
     /// Finds the next child after the given iterator. This is good for when you can guess the order
-    /// of the nodes, which can cut down on starting from the beginning. Passing null starts over
-    /// from the beginning. Returns the found node or null (it will loop back around).
-    pub fn findNextChild(self: *const Self, start: ?*const Node, value: []const u8) ?*Node {
-        var iter: ?*Node = self.child;
-        if (start) |si| {
+    /// of the nodes, which can cut down on starting from the beginning. Pass null to start. Returns
+    /// the found node or null after not finding it after reaching the end of children.
+    pub fn findNextChild(self: *const Self, start: ?*Node, value: []const u8) ?*Node {
+        var iter: ?*Node = start;
+        if (iter) |si| {
             iter = si.sibling;
+        } else {
+            iter = self.child;
         }
-        while (iter != start) {
-            if (iter) |it| {
-                if (mem.eql(u8, it.value, value)) {
-                    return it;
-                }
-                iter = it.sibling;
-            } else {
-                // Loop back.
-                iter = self.child;
+        while (iter) |it| {
+            if (mem.eql(u8, it.value, value)) {
+                return it;
             }
+            iter = it.sibling;
         }
         return null;
     }
@@ -690,7 +687,8 @@ pub const Node = struct {
 
             var multiline_or_quote =
                 mem.indexOf(u8, n.value, "\n") != null or
-                mem.indexOf(u8, n.value, "\"") != null;
+                mem.indexOf(u8, n.value, "\"") != null or
+                mem.indexOf(u8, n.value, "'") != null;
             var contains_control =
                 mem.indexOf(u8, n.value, " ") != null or
                 mem.indexOf(u8, n.value, "\t") != null or
@@ -808,8 +806,6 @@ test "static tree" {
     var iter = tree.root.findNextChild(null, "max_particles");
     try testing.expect(iter != null);
     iter = tree.root.findNextChild(iter, "texture");
-    try testing.expect(iter != null);
-    iter = tree.root.findNextChild(iter, "max_particles");
     try testing.expect(iter != null);
     iter = tree.root.findNextChild(iter, "systems");
     try testing.expect(iter != null);
@@ -933,7 +929,7 @@ pub fn appendText(tree: anytype, parent: ?*Node, text: []const u8) ZError!void {
     const tree_type = @TypeOf(tree);
     const tree_type_info = @typeInfo(tree_type);
     if (tree_type_info != .Pointer) {
-        @compileError("copyNode expects a zzz tree pointer");
+        @compileError("appendText expects a zzz tree pointer");
     }
 
     var current: *Node = if (parent == null) &tree.root else parent.?;
