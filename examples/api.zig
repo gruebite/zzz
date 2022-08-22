@@ -1,7 +1,7 @@
 pub const std = @import("std");
 pub const zzz = @import("zzz");
 
-fn node_functions() !void {
+fn nodeApi() zzz.ZError!void {
     var tree = zzz.StaticTree(8){};
     try zzz.appendText(&tree, null, "foo:bar;biz:baz,boom");
 
@@ -9,69 +9,68 @@ fn node_functions() !void {
 
     // Iterate nodes in the tree starting from some node.
     iter = &tree.root;
-    while (iter) |it| : (iter = it.next(null)) {
-        std.debug.print("node_functions():next(): {s}\n", .{it.*.value});
+    while (iter) |node| : (iter = node.next(null)) {
+        std.debug.print("nodeApi():next(): {s}\n", .{node.value});
     }
 
     // Iterate children.
     iter = null;
-    while (tree.root.nextChild(iter)) |it| : (iter = it) {
-        std.debug.print("node_functions():nextChild(): {s}\n", .{it.*.value});
+    while (tree.root.nextChild(iter)) |node| : (iter = node) {
+        std.debug.print("nodeApi():nextChild(): {s}\n", .{node.value});
     }
 
     // Iterate descendants.
     iter = null;
-    while (tree.root.nextDescendant(iter, null)) |it| : (iter = it) {
-        std.debug.print("node_functions():nextDescendant(): {s}\n", .{it.*.value});
+    while (tree.root.nextDescendant(iter, null)) |node| : (iter = node) {
+        std.debug.print("nodeApi():nextDescendant(): {s}\n", .{node.value});
     }
 
-    // Get nth child.
-    std.debug.print("node_functions():getNthChild(): {s}\n", .{tree.root.getNthChild(0).?.value});
-    std.debug.print("node_functions():getNthChildValue(): {s}\n", .{tree.root.getNthChildValue(1)});
-
     // Number of children.
-    std.debug.print("node_functions():getChildCount(): {}\n", .{tree.root.getChildCount()});
+    std.debug.print("nodeApi():getChildCount(): {d}\n", .{tree.root.getChildCount()});
+
+    // Get nth child.
+    std.debug.print("nodeApi():getNthChild(): {s}\n", .{tree.root.getNthChild(0).?.value});
+    std.debug.print("nodeApi():getNthChildValue(): {s}\n", .{tree.root.getNthChildValue(1)});
 
     // Find children/descendants.
-    std.debug.print("node_functions():findChild(): {s}\n", .{tree.root.findChild("biz").?.value});
-    std.debug.print("node_functions():findDescendant(): {s}\n", .{tree.root.findDescendant("boom").?.value});
+    std.debug.print("nodeApi():findChild(): {s}\n", .{tree.root.findChild("biz").?.value});
+    std.debug.print("nodeApi():findDescendant(): {s}\n", .{tree.root.findDescendant("boom").?.value});
 
     // Output.
     tree.root.show();
 }
 
-fn static_tree_functions() !void {
+fn staticTreeApi() zzz.ZError!void {
     var tree = zzz.StaticTree(8){};
     try zzz.appendText(&tree, null, "foo:bar;biz:baz,boom");
 
     // Remaining nodes in the tree.
-    std.debug.print("static_tree_functions():node_count: {}\n", .{tree.node_count});
-    std.debug.print("static_tree_functions():nodesRemaining(): {}\n", .{tree.nodesRemaining()});
+    std.debug.print("staticTreeApi():node_count: {d}\n", .{tree.node_count});
+    std.debug.print("staticTreeApi():nodesRemaining(): {d}\n", .{tree.nodesRemaining()});
 
     // Check if we can append more text.
-    std.debug.print("static_tree_functions():canAppend(): {}\n", .{tree.canAppend("this:will:not:fit")});
-    std.debug.print("static_tree_functions():canAppend(): {}\n", .{tree.canAppend("this:will")});
+    std.debug.print("staticTreeApi():canAppend(): {s}\n", .{tree.canAppend("this:will:not:fit")});
+    std.debug.print("staticTreeApi():canAppend(): {s}\n", .{tree.canAppend("this:will")});
 
     // Appending values.
-    std.debug.print("static_tree_functions():appendValue(): {s}\n", .{(try tree.appendValue(null, "last one")).value});
+    std.debug.print("staticTreeApi():appendValue(): {s}\n", .{(try tree.appendValue(null, "last one")).value});
 
     // Clearing.
     tree.clear();
 }
 
-fn dynamic_tree_functions() !void {
+fn dynamicTreeApi() zzz.ZError!void {
     var tree = zzz.DynamicTree.init(std.testing.allocator);
     defer tree.deinit();
 
     try zzz.appendText(&tree, null, "foo:bar;biz:baz,boom");
 
     // Appending values and types.
-    std.debug.print("dynamic_tree_functions():appendValue(): {s}\n", .{(try tree.appendValue(null, "some string")).value});
-    std.debug.print("dynamic_tree_functions():appendAnytype(): {s}\n", .{(try tree.appendAnytype(null, 42)).value});
-
+    std.debug.print("dynamicTreeApi():appendValue(): {s}\n", .{(try tree.appendValue(null, "some string")).value});
+    std.debug.print("dynamicTreeApi():apndAnytype(): {s}\n", .{(try tree.appendAnytype(null, 42)).value});
 }
 
-fn module_functions() !void {
+fn moduleApi() zzz.ZError!void {
     var stree = zzz.StaticTree(8){};
     var dtree = zzz.DynamicTree.init(std.testing.allocator);
     defer dtree.deinit();
@@ -86,12 +85,12 @@ fn module_functions() !void {
     dtree.root.show();
 
     // Count text nodes.
-    std.debug.print("module_functions():countTextNodes(): {}\n", .{zzz.countTextNodes("this:has:four:nodes")});
+    std.debug.print("moduleApi():countTextNodes(): {d}\n", .{zzz.countTextNodes("this:has:four:nodes")});
 }
 
-pub fn main() !void {
-    try node_functions();
-    try static_tree_functions();
-    try dynamic_tree_functions();
-    try module_functions();
+pub fn main() zzz.ZError!void {
+    try nodeApi();
+    try staticTreeApi();
+    try dynamicTreeApi();
+    try moduleApi();
 }

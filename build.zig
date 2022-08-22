@@ -46,7 +46,7 @@ const examples = [_]Example{
     },
 };
 
-pub fn build(b: *Builder) !void {
+pub fn build(b: *Builder) void {
     const mode = b.standardReleaseOptions();
     const target = b.standardTargetOptions(.{
         .default_target = if (builtin.os.tag == .windows)

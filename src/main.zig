@@ -44,6 +44,7 @@ pub const StreamingParser = struct {
         InvalidCharacterAfterString,
         SemicolonWentPastRoot,
         UnexpectedEof,
+        ExhaustedLoop,
     };
 
     pub const State = enum {
@@ -103,7 +104,7 @@ pub const StreamingParser = struct {
         self.trailing_spaces = 0;
     }
 
-    pub fn completeOrError(self: *const Self) !void {
+    pub fn completeOrError(self: *const Self) Error!void {
         switch (self.state) {
             .end_node, .empty_line, .end_string, .comment, .open_comment, .indent => {},
             else => return Error.UnexpectedEof,
@@ -376,7 +377,7 @@ pub const StreamingParser = struct {
     }
 
     /// Parses the stream, outputting NodeTokens which reference the text.
-    pub fn parse(self: *Self, idx: *usize, text: []const u8) !?NodeToken {
+    pub fn parse(self: *Self, idx: *usize, text: []const u8) Error!?NodeToken {
         while (idx.* <= text.len) {
             // Insert an extra newline at the end of the stream.
             const node = if (idx.* == text.len) try self.feed('\n') else try self.feed(text[idx.*]);
@@ -389,16 +390,13 @@ pub const StreamingParser = struct {
     }
 };
 
-fn testNextTextOrError(stream: *StreamingParser, idx: *usize, text: []const u8) ![]const u8 {
+fn testNextTextOrError(stream: *StreamingParser, idx: *usize, text: []const u8) StreamingParser.Error![]const u8 {
     while (idx.* < text.len) {
         const node = try stream.feed(text[idx.*]);
         idx.* += 1;
-        if (node) |n| {
-            //std.debug.print("TOKEN {}\n", .{text[n.start..n.end]});
-            return text[n.start..n.end];
-        }
+        if (node) |n| return text[n.start..n.end];
     }
-    return error.ExhaustedLoop;
+    return StreamingParser.Error.ExhaustedLoop;
 }
 
 test "parsing slice output" {
@@ -432,7 +430,7 @@ test "parsing slice output" {
     try testing.expectEqualSlices(u8, "hi", try testNextTextOrError(&stream, &idx, text));
 }
 
-fn testNextLevelOrError(stream: *StreamingParser, idx: *usize, text: []const u8) !usize {
+fn testNextLevelOrError(stream: *StreamingParser, idx: *usize, text: []const u8) StreamingParser.Error!usize {
     while (idx.* < text.len) {
         const node = try stream.feed(text[idx.*]);
         idx.* += 1;
@@ -440,7 +438,7 @@ fn testNextLevelOrError(stream: *StreamingParser, idx: *usize, text: []const u8)
             return n.depth;
         }
     }
-    return error.ExhaustedLoop;
+    return StreamingParser.Error.ExhaustedLoop;
 }
 
 test "parsing depths" {
@@ -922,7 +920,7 @@ pub const DynamicTree = struct {
     }
 };
 
-const ZError = DynamicTreeError || StaticTreeError;
+pub const ZError = DynamicTreeError || StaticTreeError;
 
 /// Adds text under a parent node.  Passing null will put the text under root.
 pub fn appendText(tree: anytype, parent: ?*Node, text: []const u8) ZError!void {
@@ -1005,7 +1003,7 @@ pub fn copyNode(tree: anytype, parent: ?*Node, node: *const Node) ZError!*Node {
 }
 
 /// Parses and counts the number of nodes in a text.
-pub fn countTextNodes(text: []const u8) !usize {
+pub fn countTextNodes(text: []const u8) StreamingParser.Error!usize {
     var count: usize = 0;
 
     var stream = StreamingParser.init();

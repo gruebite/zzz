@@ -1,7 +1,7 @@
 pub const std = @import("std");
 pub const zzz = @import("zzz");
 
-pub fn main() !void {
+pub fn main() zzz.ZError!void {
     // Creates a static tree that can contain 100 nodes total.
     var tree = zzz.StaticTree(100){};
 
