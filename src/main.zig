@@ -1023,7 +1023,7 @@ pub fn countTextNodes(text: []const u8) !usize {
 test "dynamic tree" {
     const testing = std.testing;
 
-    var tree0 = DynamicTree.init(testing.allocator);
+    var tree0 = DynamicTree.init(std.heap.page_allocator);
     defer tree0.deinit();
 
     try appendText(&tree0, null,

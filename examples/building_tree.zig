@@ -17,7 +17,7 @@ pub fn main() !void {
     tree.root.show();
 
     // Creates a dynamic tree that can contain any number of nodes.
-    var dtree = zzz.DynamicTree.init(std.testing.allocator);
+    var dtree = zzz.DynamicTree.init(std.heap.page_allocator);
     defer dtree.deinit();
 
     _ = try dtree.appendAnytype(null, true);

@@ -27,7 +27,7 @@ fn node_functions() !void {
 
     // Get nth child.
     std.debug.print("node_functions():getNthChild(): {s}\n", .{tree.root.getNthChild(0).?.value});
-    std.debug.print("node_functions():getNthChildValue(): {s}\n", .{tree.root.getNthChildValue(1)});
+    std.debug.print("node_functions():getNthChildValue(): {any}\n", .{tree.root.getNthChildValue(1)});
 
     // Number of children.
     std.debug.print("node_functions():getChildCount(): {}\n", .{tree.root.getChildCount()});
@@ -60,7 +60,7 @@ fn static_tree_functions() !void {
 }
 
 fn dynamic_tree_functions() !void {
-    var tree = zzz.DynamicTree.init(std.testing.allocator);
+    var tree = zzz.DynamicTree.init(std.heap.page_allocator);
     defer tree.deinit();
 
     try zzz.appendText(&tree, null, "foo:bar;biz:baz,boom");
@@ -68,12 +68,11 @@ fn dynamic_tree_functions() !void {
     // Appending values and types.
     std.debug.print("dynamic_tree_functions():appendValue(): {s}\n", .{(try tree.appendValue(null, "some string")).value});
     std.debug.print("dynamic_tree_functions():appendAnytype(): {s}\n", .{(try tree.appendAnytype(null, 42)).value});
-
 }
 
 fn module_functions() !void {
     var stree = zzz.StaticTree(8){};
-    var dtree = zzz.DynamicTree.init(std.testing.allocator);
+    var dtree = zzz.DynamicTree.init(std.heap.page_allocator);
     defer dtree.deinit();
 
     // Append text.
@@ -86,7 +85,7 @@ fn module_functions() !void {
     dtree.root.show();
 
     // Count text nodes.
-    std.debug.print("module_functions():countTextNodes(): {}\n", .{zzz.countTextNodes("this:has:four:nodes")});
+    std.debug.print("module_functions():countTextNodes(): {any}\n", .{zzz.countTextNodes("this:has:four:nodes")});
 }
 
 pub fn main() !void {
