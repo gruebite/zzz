@@ -1,8 +1,8 @@
 pub const std = @import("std");
 pub const zzz = @import("zzz");
 
-const kobold = @embedFile("../example-data/kobold.zzz");
-const json_example = @embedFile("../example-data/json-example-3.zzz");
+const kobold = @embedFile("./example-data/kobold.zzz");
+const json_example = @embedFile("./example-data/json-example-3.zzz");
 
 pub fn main() !void {
     // Dynamic trees will grow until they can't.
