@@ -1,7 +1,7 @@
 pub const std = @import("std");
 pub const zzz = @import("zzz");
 
-const particles = @embedFile("../example-data/particles.zzz");
+const particles = @embedFile("./example-data/particles.zzz");
 
 pub fn main() !void {
     var tree = zzz.StaticTree(1000){};

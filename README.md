@@ -29,7 +29,7 @@ tree.root.show();
 
 ## Quick example
 
-D&D Kobold stat block. Raw text [here](https://raw.githubusercontent.com/gruebite/zzz/main/example-data/kobold.zzz).
+D&D Kobold stat block. Raw text [here](https://raw.githubusercontent.com/gruebite/zzz/main/examples/example-data/kobold.zzz).
 
 (YAML highlighting used)
 

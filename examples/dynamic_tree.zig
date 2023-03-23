@@ -1,12 +1,12 @@
 pub const std = @import("std");
 pub const zzz = @import("zzz");
 
-const kobold = @embedFile("../example-data/kobold.zzz");
-const json_example = @embedFile("../example-data/json-example-3.zzz");
+const kobold = @embedFile("./example-data/kobold.zzz");
+const json_example = @embedFile("./example-data/json-example-3.zzz");
 
 pub fn main() !void {
     // Dynamic trees will grow until they can't.
-    var tree = zzz.DynamicTree.init(std.testing.allocator);
+    var tree = zzz.DynamicTree.init(std.heap.page_allocator);
     defer tree.deinit();
 
     // Append the text to the tree.
@@ -18,7 +18,7 @@ pub fn main() !void {
     // This function searches all the node's descendants.
     std.debug.print("Kobold's CON: {s}\n", .{tree.root.findDescendant("con").?.child.?.value});
 
-    var big_tree = zzz.DynamicTree.init(std.testing.allocator);
+    var big_tree = zzz.DynamicTree.init(std.heap.page_allocator);
     defer big_tree.deinit();
     try zzz.appendText(&big_tree, null, json_example);
     big_tree.root.show();

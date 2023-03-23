@@ -2,18 +2,10 @@ const std = @import("std");
 const builtin = @import("builtin");
 const Builder = std.build.Builder;
 
-pub fn createPackage(comptime root: []const u8) std.build.Pkg {
-    return std.build.Pkg{
-        .name = "zzz",
-        .path = root ++ "/src/main.zig",
-        .dependencies = &[_]std.build.Pkg{},
-    };
-}
-
 const pkgs = struct {
     const zzz = std.build.Pkg{
         .name = "zzz",
-        .path = .{ .path = "src/main.zig" },
+        .source = .{ .path = "src/main.zig" },
         .dependencies = &[_]std.build.Pkg{},
     };
 };
